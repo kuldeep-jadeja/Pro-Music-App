@@ -2,19 +2,23 @@ import mongoose from 'mongoose';
 
 const PlaylistSchema = new mongoose.Schema(
     {
+        // ── Owner (auth) ────────────────────────────────────────────────
+        user: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+            required: true,
+            index: true,
+        },
         name: {
             type: String,
             required: true,
         },
         description: String,
         coverImage: String,
-        // unique: true prevents duplicate playlist documents when two users
-        // import the same Spotify URL at the exact same instant (MongoDB race
-        // condition on concurrent findOneAndUpdate upserts with non-unique index).
         spotifyPlaylistId: {
             type: String,
             required: true,
-            unique: true,
+            // unique constraint is now a compound index — see bottom of file.
         },
         owner: {
             type: String, // spotify user display name or id
@@ -57,6 +61,8 @@ const PlaylistSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
-// Index declared in schema via `unique: true` — no separate .index() call needed.
+// Compound unique index: same Spotify playlist can exist once per user, but
+// different users may each import the same playlist independently.
+PlaylistSchema.index({ spotifyPlaylistId: 1, user: 1 }, { unique: true });
 
 export default mongoose.models.Playlist || mongoose.model('Playlist', PlaylistSchema);

@@ -1,5 +1,6 @@
 import { connectDB } from '@/lib/mongodb';
 import { withRateLimit } from '@/lib/rateLimit';
+import { requireAuth } from '@/lib/requireAuth';
 import {
     extractPlaylistId,
     getPublicPlaylistData,
@@ -101,12 +102,13 @@ async function handler(req, res) {
         //    The atomic guard below is what flips to 'matching' and spawns
         //    the background task, ensuring only one task runs at a time.
         const playlist = await Playlist.findOneAndUpdate(
-            { spotifyPlaylistId: playlistId },
+            { spotifyPlaylistId: playlistId, user: req.user._id },
             {
                 name: info.name,
                 description: info.description,
                 coverImage: info.coverImage,
                 owner: info.owner,
+                user: req.user._id,
                 tracks: trackIds,
                 trackCount: trackIds.length,
                 // If all tracks are cached, mark ready immediately.
@@ -163,4 +165,4 @@ async function handler(req, res) {
     }
 }
 
-export default withRateLimit(handler, 10, 60000); // 10 imports per minute
+export default withRateLimit(requireAuth(handler), 10, 60000); // 10 imports per minute

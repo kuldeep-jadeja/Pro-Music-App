@@ -1,5 +1,7 @@
 import Head from 'next/head';
+import Link from 'next/link';
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/router';
 import Navbar from '@/components/Navbar';
 import ImportForm from '@/components/ImportForm';
 import PlaylistCard from '@/components/PlaylistCard';
@@ -8,12 +10,72 @@ import Player from '@/components/Player';
 import styles from '@/styles/Home.module.scss';
 
 export default function Home() {
+  const router = useRouter();
+  const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [playlists, setPlaylists] = useState([]);
   const [activePlaylist, setActivePlaylist] = useState(null);
   const [tracks, setTracks] = useState([]);
   const [currentTrack, setCurrentTrack] = useState(null);
   const [currentIndex, setCurrentIndex] = useState(-1);
   const [loadingTracks, setLoadingTracks] = useState(false);
+
+  // Check auth status on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          setUser(data.user);
+        }
+      } catch {
+        // Not authenticated — that's fine
+      } finally {
+        setAuthChecked(true);
+      }
+    })();
+  }, []);
+
+  // Fetch user's playlists when authenticated
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const res = await fetch('/api/playlists');
+        if (res.ok) {
+          const data = await res.json();
+          setPlaylists(
+            (data.playlists || []).map((p) => ({
+              id: p._id,
+              name: p.name,
+              status: p.status,
+              importProgress: p.importProgress,
+              coverImage: p.coverImage,
+            }))
+          );
+        }
+      } catch (err) {
+        console.error('Failed to fetch playlists:', err);
+      }
+    })();
+  }, [user]);
+
+  // Logout handler
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // ignore
+    }
+    setUser(null);
+    setPlaylists([]);
+    setActivePlaylist(null);
+    setTracks([]);
+    setCurrentTrack(null);
+    setCurrentIndex(-1);
+    router.push('/login');
+  };
 
   // Load full playlist with tracks
   // Declared first — handleImportSuccess depends on this in its useCallback
@@ -125,13 +187,17 @@ export default function Home() {
       </Head>
 
       <div className={styles.app}>
-        <Navbar />
+        <Navbar user={user} onLogout={handleLogout} />
 
         <main className={styles.main}>
           {/* Sidebar */}
           <aside className={styles.sidebar}>
             <h2 className={styles.sidebarTitle}>Your Library</h2>
-            {playlists.length === 0 ? (
+            {!user ? (
+              <p className={styles.sidebarEmpty}>
+                <Link href="/login">Log in</Link> to see your playlists
+              </p>
+            ) : playlists.length === 0 ? (
               <p className={styles.sidebarEmpty}>
                 Import a Spotify playlist to get started
               </p>
@@ -150,7 +216,15 @@ export default function Home() {
 
           {/* Content */}
           <section className={styles.content}>
-            <ImportForm onImportSuccess={handleImportSuccess} />
+            {user ? (
+              <ImportForm onImportSuccess={handleImportSuccess} />
+            ) : (
+              <div className={styles.loginCta}>
+                <h2>Welcome to Demus</h2>
+                <p>Import Spotify playlists and stream for free.</p>
+                <Link href="/login" className={styles.ctaBtn}>Log in to get started</Link>
+              </div>
+            )}
 
             {activePlaylist && (
               <div className={styles.playlistHeader}>

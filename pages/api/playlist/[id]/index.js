@@ -1,11 +1,12 @@
 import { connectDB } from '@/lib/mongodb';
+import { requireAuth } from '@/lib/requireAuth';
 import Playlist from '@/models/Playlist';
 
 /**
  * GET /api/playlist/[id]
- * Returns playlist with populated track data.
+ * Returns playlist with populated track data (scoped to authenticated user).
  */
-export default async function handler(req, res) {
+async function handler(req, res) {
     if (req.method !== 'GET') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
@@ -19,7 +20,9 @@ export default async function handler(req, res) {
     try {
         await connectDB();
 
-        const playlist = await Playlist.findById(id).populate('tracks').lean();
+        const playlist = await Playlist.findOne({ _id: id, user: req.user._id })
+            .populate('tracks')
+            .lean();
 
         if (!playlist) {
             return res.status(404).json({ error: 'Playlist not found' });
@@ -50,3 +53,5 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Failed to fetch playlist' });
     }
 }
+
+export default requireAuth(handler);

@@ -1,5 +1,6 @@
 import { connectDB } from '@/lib/mongodb';
 import { withRateLimit } from '@/lib/rateLimit';
+import { requireAuth } from '@/lib/requireAuth';
 import { batchMatchTracks } from '@/lib/youtube';
 import Playlist from '@/models/Playlist';
 import Track from '@/models/Track';
@@ -35,7 +36,7 @@ async function handler(req, res) {
 
         // Fetch playlist WITHOUT populating tracks — we query unmatched
         // tracks directly below, avoiding loading all tracks into memory.
-        const playlist = await Playlist.findById(playlistId).lean();
+        const playlist = await Playlist.findOne({ _id: playlistId, user: req.user._id }).lean();
 
         if (!playlist) {
             return res.status(404).json({ error: 'Playlist not found' });
@@ -119,4 +120,4 @@ async function handler(req, res) {
     }
 }
 
-export default withRateLimit(handler, 20, 60000); // 20 resume requests per minute
+export default withRateLimit(requireAuth(handler), 20, 60000); // 20 resume requests per minute

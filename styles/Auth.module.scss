@@ -1,0 +1,137 @@
+@use "variables" as *;
+
+.page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
+    background: $bg-primary;
+}
+
+.card {
+    width: 100%;
+    max-width: 400px;
+    background: $bg-secondary;
+    border: 1px solid $bg-elevated;
+    border-radius: $radius-lg;
+    padding: 40px 32px;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: $accent;
+    margin-bottom: 8px;
+}
+
+.brand {
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: $text-primary;
+}
+
+.title {
+    text-align: center;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: $text-primary;
+    margin-bottom: 4px;
+}
+
+.subtitle {
+    text-align: center;
+    font-size: 0.875rem;
+    color: $text-muted;
+    margin-bottom: 28px;
+}
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: $text-secondary;
+}
+
+.input {
+    background: $bg-surface;
+    border: 1px solid $bg-elevated;
+    border-radius: $radius-md;
+    padding: 12px 14px;
+    color: $text-primary;
+    font-size: 0.9375rem;
+    outline: none;
+    transition: border-color $transition-fast;
+
+    &::placeholder {
+        color: $text-muted;
+    }
+
+    &:focus {
+        border-color: $accent;
+    }
+}
+
+.button {
+    margin-top: 8px;
+    padding: 12px;
+    background: $accent;
+    color: #000;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    border-radius: $radius-md;
+    transition:
+        background $transition-fast,
+        transform $transition-fast;
+
+    &:hover:not(:disabled) {
+        background: $accent-hover;
+        transform: scale(1.01);
+    }
+
+    &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+}
+
+.error {
+    background: rgba($danger, 0.1);
+    border: 1px solid rgba($danger, 0.25);
+    color: $danger;
+    font-size: 0.8125rem;
+    padding: 10px 14px;
+    border-radius: $radius-md;
+    text-align: center;
+}
+
+.footer {
+    text-align: center;
+    margin-top: 24px;
+    font-size: 0.8125rem;
+    color: $text-muted;
+
+    a {
+        color: $accent;
+        font-weight: 600;
+        transition: color $transition-fast;
+
+        &:hover {
+            color: $accent-hover;
+        }
+    }
+}

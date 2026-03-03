@@ -1,6 +1,7 @@
+import Link from 'next/link';
 import styles from '@/styles/Navbar.module.scss';
 
-export default function Navbar() {
+export default function Navbar({ user, onLogout }) {
     return (
         <nav className={styles.navbar}>
             <div className={styles.logo}>
@@ -11,6 +12,19 @@ export default function Navbar() {
             </div>
             <div className={styles.links}>
                 <a href="/" className={styles.link}>Home</a>
+                {user ? (
+                    <>
+                        <span className={styles.email}>{user.email}</span>
+                        <button className={styles.logoutBtn} onClick={onLogout}>
+                            Log out
+                        </button>
+                    </>
+                ) : (
+                    <>
+                        <Link href="/login" className={styles.link}>Log in</Link>
+                        <Link href="/signup" className={styles.authBtn}>Sign up</Link>
+                    </>
+                )}
             </div>
         </nav>
     );

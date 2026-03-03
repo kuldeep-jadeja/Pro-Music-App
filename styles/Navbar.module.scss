@@ -63,3 +63,30 @@
         transform: scale(1.02);
     }
 }
+
+.email {
+    font-size: 0.8125rem;
+    color: $text-muted;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.logoutBtn {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 8px 16px;
+    background: $bg-surface;
+    color: $text-secondary;
+    border-radius: $radius-full;
+    border: 1px solid $bg-elevated;
+    transition:
+        background $transition-fast,
+        color $transition-fast;
+
+    &:hover {
+        background: $bg-surface-hover;
+        color: $text-primary;
+    }
+}

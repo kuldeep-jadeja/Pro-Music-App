@@ -1,4 +1,5 @@
 import { connectDB } from '@/lib/mongodb';
+import { requireAuth } from '@/lib/requireAuth';
 import Playlist from '@/models/Playlist';
 import mongoose from 'mongoose';
 
@@ -13,7 +14,7 @@ import mongoose from 'mongoose';
  * The client should switch to the full GET /api/playlist/[id] endpoint
  * (which includes tracks) only once status transitions to 'ready'.
  */
-export default async function handler(req, res) {
+async function handler(req, res) {
     if (req.method !== 'GET') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
@@ -27,7 +28,7 @@ export default async function handler(req, res) {
     try {
         await connectDB();
 
-        const playlist = await Playlist.findById(id)
+        const playlist = await Playlist.findOne({ _id: id, user: req.user._id })
             .select('status importProgress')
             .lean();
 
@@ -44,3 +45,5 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Failed to fetch status' });
     }
 }
+
+export default requireAuth(handler);

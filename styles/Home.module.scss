@@ -137,6 +137,46 @@
     }
 }
 
+// ── Login CTA ────────────────────────────────────────────────
+.loginCta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 24px;
+    text-align: center;
+
+    h2 {
+        font-size: 2rem;
+        font-weight: 800;
+        margin-bottom: 8px;
+    }
+
+    p {
+        color: $text-secondary;
+        font-size: 1rem;
+        margin-bottom: 24px;
+    }
+}
+
+.ctaBtn {
+    display: inline-block;
+    padding: 12px 28px;
+    background: $accent;
+    color: #000;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    border-radius: $radius-full;
+    transition:
+        background $transition-fast,
+        transform $transition-fast;
+
+    &:hover {
+        background: $accent-hover;
+        transform: scale(1.02);
+    }
+}
+
 // ── Responsive ───────────────────────────────────────────────
 @media (max-width: 768px) {
     .sidebar {
