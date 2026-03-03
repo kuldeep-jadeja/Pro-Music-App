@@ -1,6 +1,7 @@
 import { connectDB } from '@/lib/mongodb';
 import { requireAuth } from '@/lib/requireAuth';
 import Playlist from '@/models/Playlist';
+import '@/models/Track'; // Register Track schema so Playlist.populate('tracks') works
 
 /**
  * GET /api/playlist/[id]
