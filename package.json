@@ -1,0 +1,21 @@
+{
+  "name": "spotify_knockoff",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "axios": "^1.13.6",
+    "crypto-js": "^4.2.0",
+    "mongoose": "^9.2.3",
+    "next": "16.1.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "sass": "^1.97.3",
+    "spotify-url-info": "^3.2.18",
+    "yt-search": "^2.13.1"
+  }
+}

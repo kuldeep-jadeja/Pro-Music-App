@@ -1,0 +1,228 @@
+@use "variables" as *;
+
+.player {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: $player-height;
+    background: $bg-secondary;
+    border-top: 1px solid $bg-elevated;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    z-index: 100;
+}
+
+.empty {
+    width: 100%;
+    text-align: center;
+    color: $text-muted;
+    font-size: 0.875rem;
+}
+
+// ── Track Info ───────────────────────────────────────────────
+.trackInfo {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 200px;
+    max-width: 280px;
+}
+
+.albumArt {
+    width: 56px;
+    height: 56px;
+    border-radius: $radius-sm;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 2px;
+}
+
+.trackName {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: $text-primary;
+    @include truncate;
+}
+
+.artistName {
+    font-size: 0.8125rem;
+    color: $text-secondary;
+    @include truncate;
+}
+
+// ── Controls ─────────────────────────────────────────────────
+.controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    max-width: 600px;
+}
+
+.buttons {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.controlBtn {
+    color: $text-secondary;
+    padding: 4px;
+    transition: color $transition-fast;
+
+    &:hover:not(:disabled) {
+        color: $text-primary;
+    }
+
+    &:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+    }
+}
+
+.playBtn {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: $text-primary;
+    color: $bg-primary;
+    border-radius: 50%;
+    transition: transform $transition-fast;
+
+    &:hover {
+        transform: scale(1.06);
+    }
+}
+
+// ── Progress Bar ─────────────────────────────────────────────
+.progressRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+}
+
+.time {
+    font-size: 0.6875rem;
+    color: $text-muted;
+    min-width: 36px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.progressBar {
+    flex: 1;
+    height: 4px;
+    background: $bg-elevated;
+    border-radius: 2px;
+    cursor: pointer;
+    position: relative;
+    transition: height $transition-fast;
+
+    &:hover {
+        height: 6px;
+
+        .progressFill::after {
+            opacity: 1;
+        }
+    }
+}
+
+.progressFill {
+    height: 100%;
+    background: $text-primary;
+    border-radius: 2px;
+    position: relative;
+    transition: width 0.3s linear;
+    max-width: 100%;
+
+    &:hover {
+        background: $accent;
+    }
+
+    &::after {
+        content: "";
+        position: absolute;
+        right: -5px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 10px;
+        height: 10px;
+        background: $text-primary;
+        border-radius: 50%;
+        opacity: 0;
+        transition: opacity $transition-fast;
+    }
+}
+
+// ── Volume ───────────────────────────────────────────────────
+.volume {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 140px;
+    justify-content: flex-end;
+    color: $text-secondary;
+}
+
+.volumeSlider {
+    width: 90px;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: $bg-elevated;
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+
+    &::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 12px;
+        height: 12px;
+        background: $text-primary;
+        border-radius: 50%;
+        cursor: pointer;
+    }
+
+    &::-moz-range-thumb {
+        width: 12px;
+        height: 12px;
+        background: $text-primary;
+        border-radius: 50%;
+        cursor: pointer;
+        border: none;
+    }
+}
+
+// ── Responsive ───────────────────────────────────────────────
+@media (max-width: 768px) {
+    .player {
+        padding: 0 12px;
+    }
+
+    .trackInfo {
+        min-width: 120px;
+        max-width: 160px;
+    }
+
+    .albumArt {
+        width: 40px;
+        height: 40px;
+    }
+
+    .volume {
+        display: none;
+    }
+}

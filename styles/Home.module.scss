@@ -1,0 +1,164 @@
+@use "variables" as *;
+
+.app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    padding-bottom: $player-height;
+}
+
+.main {
+    display: flex;
+    flex: 1;
+    margin-top: $navbar-height;
+}
+
+// ── Sidebar ──────────────────────────────────────────────────
+.sidebar {
+    width: $sidebar-width;
+    min-width: $sidebar-width;
+    background: $bg-secondary;
+    border-right: 1px solid $bg-elevated;
+    padding: 20px 12px;
+    height: calc(100vh - $navbar-height - $player-height);
+    overflow-y: auto;
+    position: sticky;
+    top: $navbar-height;
+}
+
+.sidebarTitle {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: $text-secondary;
+    margin-bottom: 16px;
+    padding: 0 8px;
+}
+
+.sidebarEmpty {
+    color: $text-muted;
+    font-size: 0.875rem;
+    padding: 0 8px;
+    line-height: 1.5;
+}
+
+.playlistGrid {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+// ── Content ──────────────────────────────────────────────────
+.content {
+    flex: 1;
+    padding: 24px 32px;
+    min-width: 0;
+    height: calc(100vh - $navbar-height - $player-height);
+    overflow-y: auto;
+}
+
+// ── Playlist Header ──────────────────────────────────────────
+.playlistHeader {
+    display: flex;
+    align-items: flex-end;
+    gap: 24px;
+    margin: 32px 0 24px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid $bg-elevated;
+}
+
+.playlistCover {
+    width: 180px;
+    height: 180px;
+    border-radius: $radius-md;
+    object-fit: cover;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.playlistMeta {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.playlistLabel {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: $text-secondary;
+}
+
+.playlistName {
+    font-size: 2.5rem;
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+}
+
+.playlistDesc {
+    color: $text-secondary;
+    font-size: 0.875rem;
+}
+
+.statusBadge {
+    color: $accent;
+    font-weight: 500;
+}
+
+// ── Loading ──────────────────────────────────────────────────
+.loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 0;
+    color: $text-secondary;
+
+    p {
+        margin-top: 12px;
+        font-size: 0.875rem;
+    }
+}
+
+.spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid $bg-elevated;
+    border-top-color: $accent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+// ── Responsive ───────────────────────────────────────────────
+@media (max-width: 768px) {
+    .sidebar {
+        display: none;
+    }
+
+    .content {
+        padding: 16px;
+    }
+
+    .playlistHeader {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+
+    .playlistCover {
+        width: 140px;
+        height: 140px;
+    }
+
+    .playlistName {
+        font-size: 1.75rem;
+    }
+}

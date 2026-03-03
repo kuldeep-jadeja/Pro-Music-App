@@ -1,0 +1,110 @@
+@use "variables" as *;
+
+.form {
+    width: 100%;
+    max-width: 680px;
+}
+
+.inputGroup {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.inputWrapper {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    background: $bg-surface;
+    border: 1px solid $bg-elevated;
+    border-radius: $radius-full;
+    padding: 0 16px;
+    transition: border-color $transition-fast;
+
+    &:focus-within {
+        border-color: $accent;
+    }
+}
+
+.icon {
+    color: $text-muted;
+    flex-shrink: 0;
+    margin-right: 10px;
+}
+
+.input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: $text-primary;
+    font-size: 0.9375rem;
+    padding: 12px 0;
+
+    &::placeholder {
+        color: $text-muted;
+    }
+
+    &:disabled {
+        opacity: 0.5;
+    }
+}
+
+.button {
+    flex-shrink: 0;
+    padding: 12px 24px;
+    background: $accent;
+    color: #000;
+    font-size: 0.875rem;
+    font-weight: 700;
+    border-radius: $radius-full;
+    transition:
+        background $transition-fast,
+        transform $transition-fast;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 140px;
+
+    &:hover:not(:disabled) {
+        background: $accent-hover;
+        transform: scale(1.02);
+    }
+
+    &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+}
+
+.spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(0, 0, 0, 0.2);
+    border-top-color: #000;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+.error {
+    color: $danger;
+    font-size: 0.8125rem;
+    margin-top: 8px;
+    padding-left: 16px;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (max-width: 640px) {
+    .inputGroup {
+        flex-direction: column;
+    }
+
+    .button {
+        width: 100%;
+    }
+}

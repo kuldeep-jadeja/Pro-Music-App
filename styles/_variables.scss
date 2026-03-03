@@ -1,0 +1,55 @@
+// ── Design Tokens ─────────────────────────────────────────────
+$bg-primary: #0a0a0a;
+$bg-secondary: #121212;
+$bg-surface: #1a1a1a;
+$bg-surface-hover: #252525;
+$bg-elevated: #2a2a2a;
+
+$text-primary: #ffffff;
+$text-secondary: #a0a0a0;
+$text-muted: #666666;
+
+$accent: #1db954; // Spotify green
+$accent-hover: #1ed760;
+$accent-dim: rgba(29, 185, 84, 0.1);
+
+$warning: #f59e0b;
+$warning-dim: rgba(245, 158, 11, 0.15);
+$danger: #ef4444;
+
+$radius-sm: 4px;
+$radius-md: 8px;
+$radius-lg: 12px;
+$radius-full: 9999px;
+
+$font-sans:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+
+$player-height: 80px;
+$navbar-height: 56px;
+$sidebar-width: 280px;
+
+$transition-fast: 150ms ease;
+$transition-normal: 250ms ease;
+
+// ── Mixins ────────────────────────────────────────────────────
+@mixin truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@mixin hover-lift {
+    transition:
+        transform $transition-fast,
+        box-shadow $transition-fast;
+    &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+    }
+}

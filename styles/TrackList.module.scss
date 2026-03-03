@@ -1,0 +1,157 @@
+@use "variables" as *;
+
+.container {
+    margin-top: 8px;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    padding: 0 16px 8px;
+    border-bottom: 1px solid $bg-elevated;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: $text-muted;
+}
+
+.colNum {
+    width: 40px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.colTitle {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.colAlbum {
+    width: 200px;
+    flex-shrink: 0;
+    @include truncate;
+
+    @media (max-width: 900px) {
+        display: none;
+    }
+}
+
+.colDuration {
+    width: 70px;
+    flex-shrink: 0;
+    text-align: right;
+}
+
+.list {
+    display: flex;
+    flex-direction: column;
+}
+
+.track {
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    border-radius: $radius-md;
+    cursor: pointer;
+    transition: background $transition-fast;
+    font-size: 0.875rem;
+
+    &:hover {
+        background: $bg-surface-hover;
+    }
+
+    &.active {
+        background: $accent-dim;
+
+        .trackName {
+            color: $accent;
+        }
+    }
+
+    &.unavailable {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
+}
+
+.albumArt {
+    width: 40px;
+    height: 40px;
+    border-radius: $radius-sm;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.trackInfo {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.trackName {
+    font-weight: 500;
+    color: $text-primary;
+    @include truncate;
+}
+
+.artistName {
+    font-size: 0.8125rem;
+    color: $text-secondary;
+    @include truncate;
+}
+
+.badge {
+    font-size: 0.6875rem;
+    color: $text-muted;
+    background: $bg-elevated;
+    padding: 2px 8px;
+    border-radius: $radius-full;
+}
+
+.empty {
+    color: $text-muted;
+    font-size: 0.875rem;
+    text-align: center;
+    padding: 40px 0;
+}
+
+// ── Playing animation ────────────────────────────────────────
+.playingIcon {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 14px;
+
+    span {
+        width: 3px;
+        background: $accent;
+        border-radius: 1px;
+        animation: playBars 0.8s ease-in-out infinite alternate;
+
+        &:nth-child(1) {
+            height: 6px;
+            animation-delay: 0s;
+        }
+        &:nth-child(2) {
+            height: 10px;
+            animation-delay: 0.2s;
+        }
+        &:nth-child(3) {
+            height: 4px;
+            animation-delay: 0.4s;
+        }
+    }
+}
+
+@keyframes playBars {
+    0% {
+        height: 4px;
+    }
+    100% {
+        height: 14px;
+    }
+}
