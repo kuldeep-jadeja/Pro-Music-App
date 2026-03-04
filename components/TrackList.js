@@ -27,14 +27,12 @@ export default function TrackList({ tracks, currentTrackId, onTrackSelect }) {
             <ul className={styles.list}>
                 {tracks.map((track, index) => {
                     const isActive = currentTrackId === track.id;
-                    const hasYoutube = !!track.youtubeVideoId;
 
                     return (
                         <li
                             key={track.id || track.spotifyId || index}
-                            className={`${styles.track} ${isActive ? styles.active : ''} ${!hasYoutube ? styles.unavailable : ''
-                                }`}
-                            onClick={() => hasYoutube && onTrackSelect?.(track, index)}
+                            className={`${styles.track} ${isActive ? styles.active : ''}`}
+                            onClick={() => onTrackSelect?.(track, index)}
                         >
                             <span className={styles.colNum}>
                                 {isActive ? (
@@ -62,11 +60,7 @@ export default function TrackList({ tracks, currentTrackId, onTrackSelect }) {
                             </div>
                             <span className={styles.colAlbum}>{track.album || ''}</span>
                             <span className={styles.colDuration}>
-                                {hasYoutube ? (
-                                    formatDuration(track.duration)
-                                ) : (
-                                    <span className={styles.badge}>No match</span>
-                                )}
+                                {formatDuration(track.duration)}
                             </span>
                         </li>
                     );

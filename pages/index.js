@@ -7,6 +7,7 @@ import ImportForm from '@/components/ImportForm';
 import PlaylistCard from '@/components/PlaylistCard';
 import TrackList from '@/components/TrackList';
 import Player from '@/components/Player';
+import { usePlayer } from '@/context/PlayerContext';
 import styles from '@/styles/Home.module.scss';
 
 export default function Home() {
@@ -16,9 +17,10 @@ export default function Home() {
   const [playlists, setPlaylists] = useState([]);
   const [activePlaylist, setActivePlaylist] = useState(null);
   const [tracks, setTracks] = useState([]);
-  const [currentTrack, setCurrentTrack] = useState(null);
-  const [currentIndex, setCurrentIndex] = useState(-1);
   const [loadingTracks, setLoadingTracks] = useState(false);
+
+  // Global player context — playback state & actions
+  const { playTrack, setQueue, currentTrack, currentIndex } = usePlayer();
 
   // Check auth status on mount
   useEffect(() => {
@@ -72,8 +74,7 @@ export default function Home() {
     setPlaylists([]);
     setActivePlaylist(null);
     setTracks([]);
-    setCurrentTrack(null);
-    setCurrentIndex(-1);
+    setQueue([]);  // Reset the global player queue
     router.push('/login');
   };
 
@@ -89,14 +90,16 @@ export default function Home() {
 
       if (res.ok) {
         setActivePlaylist(data);
-        setTracks(data.tracks || []);
+        const trackList = data.tracks || [];
+        setTracks(trackList);
+        setQueue(trackList);  // Sync global player queue with loaded tracks
       }
     } catch (err) {
       console.error('Failed to load playlist:', err);
     } finally {
       setLoadingTracks(false);
     }
-  }, []);
+  }, [setQueue]);
 
   // Handle successful import
   const handleImportSuccess = useCallback((playlist) => {
@@ -166,15 +169,10 @@ export default function Home() {
     return () => clearInterval(pollInterval);
   }, [activePlaylist?.id, activePlaylist?.status]);
 
-  // Track selection
+  // Track selection — delegates to global PlayerContext which handles
+  // YouTube matching (cache check → scrape if needed) and playback.
   const handleTrackSelect = (track, index) => {
-    setCurrentTrack(track);
-    setCurrentIndex(index);
-  };
-
-  const handleTrackChange = (track, index) => {
-    setCurrentTrack(track);
-    setCurrentIndex(index);
+    playTrack(track, index);
   };
 
   return (
@@ -271,13 +269,8 @@ export default function Home() {
           </section>
         </main>
 
-        {/* Player Bar */}
-        <Player
-          track={currentTrack}
-          playlist={tracks}
-          currentIndex={currentIndex}
-          onTrackChange={handleTrackChange}
-        />
+        {/* Player Bar — reads all state from PlayerContext */}
+        <Player />
       </div>
     </>
   );
