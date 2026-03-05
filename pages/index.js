@@ -18,11 +18,14 @@ function getGreeting() {
 export default function Home() {
   const {
     user,
+    authChecked,
     playlists,
+    loadingPlaylists,
     activePlaylist,
     loadingTracks,
     handleImportSuccess,
     loadPlaylist,
+    clearActivePlaylist,
     tracks,
     currentTrack,
     handleTrackSelect,
@@ -47,7 +50,9 @@ export default function Home() {
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      {user ? (
+      {/* While the session cookie is being verified, show nothing to prevent
+          the guest CTA flashing briefly after login/signup redirect. */}
+      {!authChecked ? null : user ? (
         <>
           {/* Hero greeting */}
           <div className={styles.hero}>
@@ -88,11 +93,12 @@ export default function Home() {
           </div>
 
           {/* Playlists grid */}
-          {playlists?.length > 0 && (
+          {(loadingPlaylists || playlists?.length > 0) && (
             <PlaylistGrid
               id="playlists"
               title="Your Library"
               playlists={playlists}
+              loading={loadingPlaylists}
               onPlaylistClick={(pl) => router.push(`/playlist/${pl.id}`)}
             />
           )}
@@ -109,6 +115,17 @@ export default function Home() {
                   />
                 )}
                 <div className={styles.playlistBgOverlay} aria-hidden="true" />
+                {/* Back / close button */}
+                <button
+                  className={styles.playlistCloseBtn}
+                  onClick={clearActivePlaylist}
+                  aria-label="Close playlist view"
+                >
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+                    <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
+                  </svg>
+                  Back
+                </button>
                 <div className={styles.playlistContent}>
                   <div className={styles.playlistArtWrap}>
                     {activePlaylist.coverImage ? (

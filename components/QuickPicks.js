@@ -68,7 +68,10 @@ export default function QuickPicks({ playlist, tracks, currentTrack, onTrackSele
 
             <div className={styles.rail} role="list">
                 {displayTracks.map((track, idx) => {
-                    const isActive = currentTrack?.id === track.id || currentTrack?._id === track._id;
+                    // Guard against undefined===undefined when tracks only carry _id
+                    const trackId = track.id ?? track._id?.toString();
+                    const currentId = currentTrack?.id ?? currentTrack?._id?.toString();
+                    const isActive = !!(currentId && trackId && currentId === trackId);
                     return (
                         <button
                             key={track.id ?? track._id}

@@ -24,14 +24,17 @@ export default function Navbar({ user, onLogout, onMenuToggle, isSidebarOpen }) 
                 </svg>
             </button>
 
-            {/* Search bar */}
-            <div className={styles.searchWrap}>
+            {/* Search bar — disabled for guests until search is implemented */}
+            <div className={`${styles.searchWrap}${!user ? ` ${styles.searchWrapDisabled}` : ''}`}>
                 <span className={styles.searchIcon}><SearchIcon /></span>
                 <input
                     className={styles.searchInput}
                     type="search"
-                    placeholder="Search songs, artists, albums…"
+                    placeholder={user ? 'Search songs, artists, albums…' : 'Log in to search'}
                     aria-label="Search"
+                    disabled={!user}
+                    title={!user ? 'Log in to search' : undefined}
+                    readOnly={!!user} // functional search not yet implemented; prevent input for logged-in users too
                 />
             </div>
 

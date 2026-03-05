@@ -2,10 +2,12 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/router';
+import { useAppContext } from '@/lib/AppContext';
 import styles from '@/styles/Auth.module.scss';
 
 export default function Signup() {
     const router = useRouter();
+    const { setUser } = useAppContext();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -36,6 +38,9 @@ export default function Signup() {
                 return;
             }
 
+            // Seed user into global context immediately so the home page
+            // renders the authenticated view on first paint — no flash.
+            setUser(data.user);
             router.push('/');
         } catch {
             setError('Network error. Please try again.');

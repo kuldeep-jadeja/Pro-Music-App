@@ -56,6 +56,16 @@
     }
 }
 
+// Dimmed state when search is not available (guests / not-yet-implemented)
+.searchWrapDisabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+
+    .searchIcon {
+        pointer-events: none;
+    }
+}
+
 .searchIcon {
     position: absolute;
     left: 14px;

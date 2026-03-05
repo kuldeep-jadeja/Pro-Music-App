@@ -92,6 +92,32 @@
     z-index: 1;
 }
 
+// Back / close button for inline playlist view
+.playlistCloseBtn {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px 6px 10px;
+    background: rgba(255, 255, 255, 0.08);
+    color: $text-secondary;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    border-radius: $radius-full;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition:
+        background $transition-fast,
+        color $transition-fast;
+
+    &:hover {
+        background: rgba(255, 255, 255, 0.14);
+        color: $text-primary;
+    }
+}
+
 .playlistContent {
     position: relative;
     z-index: 2;
@@ -152,7 +178,11 @@
     letter-spacing: -0.03em;
     color: $text-primary;
     margin: 0;
-    @include truncate;
+    // Allow up to 2 lines before truncating (fixes tablet single-line cutoff)
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
 }
 
 .playlistDesc {
@@ -263,7 +293,7 @@
 }
 
 .ctaTitle {
-    font-size: 2.5rem;
+    font-size: clamp(1.5rem, 5vw, 2.5rem);
     font-weight: 800;
     letter-spacing: -0.03em;
     color: $text-primary;

@@ -19,16 +19,19 @@
     overflow: hidden;
     transition: margin-right $transition-normal;
 
+    // Panel is always rendered (and visible) on wide screens,
+    // so always compensate with margin-right regardless of play state.
+    @media (min-width: $breakpoint-panel) {
+        margin-right: $panel-width;
+    }
+
     @media (max-width: $breakpoint-mobile) {
         margin-left: 0;
     }
 }
 
-// When a track is playing the panel is always visible on wide screens
+// Kept for backwards compatibility — no-op at panel breakpoint now
 .bodyWithPanel {
-    @media (min-width: $breakpoint-panel) {
-        margin-right: $panel-width;
-    }
 }
 
 // ── Scrollable content beneath navbar ────────────────────────
