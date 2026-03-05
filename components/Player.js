@@ -70,22 +70,37 @@ export default function Player({
             }
 
             playerRef.current = new window.YT.Player('yt-player', {
-                height: '0',
-                width: '0',
+                // iOS Safari requires non-zero dimensions on the iframe
+                // (display:none / 0×0 silently blocks audio on WebKit).
+                height: '1',
+                width: '1',
                 videoId: track.youtubeVideoId,
                 playerVars: {
                     autoplay: 1,
+                    playsinline: 1, // Required for inline playback on iOS
                     controls: 0,
                     disablekb: 1,
                     fs: 0,
                     modestbranding: 1,
                     rel: 0,
+                    origin: typeof window !== 'undefined' ? window.location.origin : '',
                 },
                 events: {
                     onReady: (event) => {
                         setIsReady(true);
                         event.target.setVolume(volume);
-                        event.target.playVideo();
+                        // iOS Safari blocks playVideo() calls that happen
+                        // outside a user-gesture callstack (onReady fires
+                        // asynchronously and is NOT in a gesture context).
+                        // Calling it here on iOS silently fails, leaving the
+                        // player in an ambiguous state that causes the first
+                        // tap on the play button to appear to do nothing.
+                        // On desktop (Chrome / Firefox / desktop Safari) the
+                        // call works fine — autoplay is permitted.
+                        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                        if (!isIOS) {
+                            event.target.playVideo();
+                        }
                     },
                     onStateChange: (event) => {
                         const state = event.data;
@@ -148,9 +163,20 @@ export default function Player({
 
     const togglePlay = () => {
         if (!playerRef.current) return;
-        if (isPlaying) {
-            playerRef.current.pauseVideo();
-        } else {
+        try {
+            // Read state DIRECTLY from the player instead of relying on the
+            // React `isPlaying` state variable.  On iOS the player can be in
+            // UNSTARTED (-1) or PAUSED (2) before the user's first gesture,
+            // and the React state may not yet reflect those transitions.
+            // getPlayerState() always returns the live value.
+            const state = playerRef.current.getPlayerState();
+            if (state === 1 /* YT.PlayerState.PLAYING */) {
+                playerRef.current.pauseVideo();
+            } else {
+                playerRef.current.playVideo();
+            }
+        } catch {
+            // Fallback if getPlayerState throws (e.g. iframe not ready)
             playerRef.current.playVideo();
         }
     };
@@ -215,8 +241,21 @@ export default function Player({
 
     return (
         <div className={styles.player} ref={containerRef}>
-            {/* Hidden YouTube player */}
-            <div id="yt-player" style={{ display: 'none' }} />
+            {/* YouTube player container.
+                 MUST NOT use display:none or visibility:hidden on iOS Safari —
+                 WebKit silently blocks audio playback from invisible elements.
+                 1×1px + opacity:0 keeps it accessible to the media engine
+                 while remaining invisible to the user. */}
+            <div id="yt-player" style={{
+                position: 'fixed',
+                width: '1px',
+                height: '1px',
+                opacity: 0,
+                top: 0,
+                left: 0,
+                pointerEvents: 'none',
+                zIndex: -1,
+            }} />
 
             {/* Track Info */}
             <div className={styles.trackInfo}>
