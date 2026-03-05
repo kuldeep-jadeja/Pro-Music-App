@@ -48,6 +48,7 @@ export default function Home() {
         <meta name="description" content="Import Spotify playlists and stream for free" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
 
       {/* While the session cookie is being verified, show nothing to prevent

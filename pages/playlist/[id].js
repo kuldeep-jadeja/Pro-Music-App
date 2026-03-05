@@ -75,6 +75,7 @@ export default function PlaylistPage() {
             <Head>
                 <title>{activePlaylist.name} — Demus</title>
                 <meta name="description" content={`${activePlaylist.name} by ${activePlaylist.owner}`} />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
             </Head>
 
             {/* ── Playlist header ─────────────────────────────── */}

@@ -53,6 +53,9 @@ export default function Signup() {
         <>
             <Head>
                 <title>Sign Up — Demus</title>
+                <meta name="description" content="Import Spotify playlists and stream for free" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <link rel="icon" href="/favicon.ico" />
             </Head>
             <div className={styles.page}>
                 <div className={styles.card}>
