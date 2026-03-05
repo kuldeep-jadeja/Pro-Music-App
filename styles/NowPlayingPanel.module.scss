@@ -1,0 +1,364 @@
+@use "variables" as *;
+
+// ── Panel shell ───────────────────────────────────────────────
+.panel {
+    position: fixed;
+    top: $navbar-height;
+    right: 0;
+    bottom: $player-height;
+    width: $panel-width;
+    background: $bg-secondary;
+    border-left: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 105;
+    transform: translateX(100%);
+    transition: transform $transition-normal;
+
+    // Always visible on wide screens
+    @media (min-width: $breakpoint-panel) {
+        transform: translateX(0);
+    }
+
+    // On narrow screens, slide in when .panelOpen is set
+    @media (max-width: #{$breakpoint-panel - 1px}) {
+        &.panelOpen {
+            transform: translateX(0);
+        }
+    }
+
+    // Hide entirely on mobile (tab bar handles Now Playing navigation)
+    @media (max-width: $breakpoint-mobile) {
+        display: none;
+    }
+}
+
+// ── Header ────────────────────────────────────────────────────
+.panelHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 18px 14px;
+    flex-shrink: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.panelTitle {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: $text-muted;
+}
+
+.closeBtn {
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    color: $text-muted;
+    border-radius: $radius-sm;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+        color $transition-fast,
+        background $transition-fast;
+
+    // Only show close button when not always-visible wide layout
+    @media (min-width: $breakpoint-panel) {
+        display: none;
+    }
+
+    &:hover {
+        color: $text-primary;
+        background: $bg-elevated;
+    }
+}
+
+// ── Album art ─────────────────────────────────────────────────
+.artWrap {
+    position: relative;
+    padding: 20px 20px 0;
+    flex-shrink: 0;
+}
+
+.art {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    border-radius: $radius-lg;
+    display: block;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+.artFallback {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: $radius-lg;
+    background: $bg-surface;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: $text-muted;
+}
+
+// Subtle gradient sheen overlay on the art
+.artShine {
+    position: absolute;
+    inset: 20px 20px 0;
+    border-radius: $radius-lg;
+    background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.04) 0%,
+        transparent 60%
+    );
+    pointer-events: none;
+}
+
+// ── Track info ────────────────────────────────────────────────
+.trackInfo {
+    padding: 18px 20px 16px;
+    flex-shrink: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.trackName {
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: $text-primary;
+    margin: 0 0 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    letter-spacing: -0.01em;
+}
+
+.trackArtist {
+    font-size: 0.8125rem;
+    color: $text-secondary;
+    margin: 0 0 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.trackAlbum {
+    font-size: 0.75rem;
+    color: $text-muted;
+    margin: 0 0 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fromPlaylist {
+    display: inline-block;
+    font-size: 0.75rem;
+    color: $accent;
+    text-decoration: none;
+    opacity: 0.8;
+    transition: opacity $transition-fast;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+
+    &:hover {
+        opacity: 1;
+        text-decoration: underline;
+    }
+}
+
+// ── Queue ─────────────────────────────────────────────────────
+.queue {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 0 12px;
+    scrollbar-width: thin;
+    scrollbar-color: $bg-elevated transparent;
+
+    &::-webkit-scrollbar {
+        width: 4px;
+    }
+    &::-webkit-scrollbar-thumb {
+        background: $bg-elevated;
+        border-radius: $radius-full;
+    }
+}
+
+.queueLabel {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: $text-muted;
+    margin: 0 0 8px;
+    padding: 0 18px;
+}
+
+.queueList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.queueItem {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 7px 18px;
+    cursor: pointer;
+    text-align: left;
+    border-radius: 0;
+    transition: background $transition-fast;
+
+    &:hover {
+        background: $bg-elevated;
+    }
+
+    &:focus-visible {
+        outline: 2px solid $accent;
+        outline-offset: -2px;
+    }
+}
+
+.queuePos {
+    font-size: 0.6875rem;
+    color: $text-muted;
+    width: 14px;
+    text-align: right;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.queueArt {
+    width: 36px;
+    height: 36px;
+    border-radius: $radius-sm;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.queueArtFallback {
+    width: 36px;
+    height: 36px;
+    border-radius: $radius-sm;
+    background: $bg-surface;
+    flex-shrink: 0;
+}
+
+.queueMeta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.queueName {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: $text-primary;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.3;
+}
+
+.queueArtist {
+    font-size: 0.75rem;
+    color: $text-muted;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.3;
+}
+
+// ── Playing bars icon animation ───────────────────────────────
+.playingBars {
+    rect:nth-child(1) {
+        animation: bar1 0.9s infinite ease-in-out;
+    }
+    rect:nth-child(2) {
+        animation: bar2 0.9s 0.15s infinite ease-in-out;
+    }
+    rect:nth-child(3) {
+        animation: bar3 0.9s 0.3s infinite ease-in-out;
+    }
+}
+
+@keyframes bar1 {
+    0%,
+    100% {
+        transform: scaleY(0.5);
+        transform-origin: bottom;
+    }
+    50% {
+        transform: scaleY(1);
+        transform-origin: bottom;
+    }
+}
+@keyframes bar2 {
+    0%,
+    100% {
+        transform: scaleY(1);
+        transform-origin: bottom;
+    }
+    50% {
+        transform: scaleY(0.4);
+        transform-origin: bottom;
+    }
+}
+@keyframes bar3 {
+    0%,
+    100% {
+        transform: scaleY(0.7);
+        transform-origin: bottom;
+    }
+    50% {
+        transform: scaleY(1);
+        transform-origin: bottom;
+    }
+}
+
+// ── Empty state ───────────────────────────────────────────────
+.emptyState {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px;
+    text-align: center;
+    gap: 10px;
+}
+
+.emptyIcon {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: $bg-surface;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: $text-muted;
+    margin-bottom: 6px;
+}
+
+.emptyTitle {
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: $text-secondary;
+    margin: 0;
+}
+
+.emptyDesc {
+    font-size: 0.8125rem;
+    color: $text-muted;
+    margin: 0;
+    line-height: 1.5;
+}

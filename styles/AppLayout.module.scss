@@ -1,0 +1,97 @@
+@use "variables" as *;
+
+// ── Shell ─────────────────────────────────────────────────────
+.shell {
+    display: flex;
+    height: 100vh;
+    background: $bg-primary;
+    overflow: hidden;
+}
+
+// ── Body (everything right of sidebar) ───────────────────────
+.body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    margin-left: $sidebar-width;
+    height: 100vh;
+    overflow: hidden;
+    transition: margin-right $transition-normal;
+
+    @media (max-width: $breakpoint-mobile) {
+        margin-left: 0;
+    }
+}
+
+// When a track is playing the panel is always visible on wide screens
+.bodyWithPanel {
+    @media (min-width: $breakpoint-panel) {
+        margin-right: $panel-width;
+    }
+}
+
+// ── Scrollable content beneath navbar ────────────────────────
+.content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px 32px calc(#{$player-height} + 28px);
+    margin-top: $navbar-height;
+
+    @media (max-width: $breakpoint-mobile) {
+        padding: 20px 16px
+            calc(
+                #{$player-height} + #{$tab-bar-height} +
+                    env(safe-area-inset-bottom) + 20px
+            );
+    }
+
+    // Custom scrollbar to match dark theme
+    scrollbar-width: thin;
+    scrollbar-color: $bg-elevated transparent;
+
+    &::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    &::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        background: $bg-elevated;
+        border-radius: $radius-full;
+    }
+}
+
+// ── Max-width content container ─────────────────────────────
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+// ── Backdrop overlay (mobile sidebar) ────────────────────────
+.backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 109;
+}
+
+// ── Player slot (fixed bottom, full width) ───────────────────
+.playerSlot {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 120;
+
+    @media (min-width: $breakpoint-panel) {
+        right: $panel-width;
+    }
+
+    @media (max-width: $breakpoint-mobile) {
+        bottom: calc(#{$tab-bar-height} + env(safe-area-inset-bottom));
+        right: 0;
+    }
+}

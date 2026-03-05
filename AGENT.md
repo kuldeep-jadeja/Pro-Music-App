@@ -13,15 +13,16 @@ Global Track Caching (Zero-Quota). Always check if a Track document already has 
 YouTube IFrame API for playback — no server proxying. Music is streamed through a hidden YouTube IFrame player (window.YT.Player). The server never proxies audio bytes. Do not stream audio through the Next.js API. Do not add ytdl-core or similar.
 MongoDB via Mongoose. Always use connectDB() from lib/mongodb.js at the top of every API handler before any DB operations. Never instantiate a new Mongoose connection elsewhere.
 Rate limiting on write endpoints. Wrap any API handler that modifies data with withRateLimit() from lib/rateLimit.js. Read-only endpoints (GET) do not require rate limiting.
-Authentication is implemented. JWT sessions (lib/auth.js) and the requireAuth HOF (lib/requireAuth.js) are production features. Do not remove or bypass them.
 Fire-and-forget background work. Long-running tasks (YouTube matching) must respond to the client immediately, then run async. Use .catch() on background promises to update Playlist status to 'paused' if rate-limited; never await them before responding.
 Path Aliases
 jsconfig.json configures @/ as root alias. Always use:
 import { connectDB } from "@/lib/mongodb";
 import Track from "@/models/Track";
 
+
 Never use relative ../../ paths.
 Environment Variables
+
 
 Variable
 Required
@@ -29,11 +30,8 @@ Description
 MONGODB_URI
 Yes
 MongoDB connection string
-JWT_SECRET
-Yes
-Secret used to sign JWTs (any long random string)
 
-Both must be defined in .env.local. lib/mongodb.js throws at startup if MONGODB_URI is missing. lib/auth.js throws at startup if JWT_SECRET is missing.
+Must be defined in .env.local. lib/mongodb.js throws at startup if MONGODB_URI is missing. (Note: YOUTUBE_API_KEY is no longer required as we use yt-search).
 File Map & Responsibilities
 lib/
 File
@@ -45,12 +43,6 @@ connectDB()
 rateLimit.js
 In-memory sliding-window rate limiter
 rateLimit(), withRateLimit()
-auth.js
-JWT sign/verify and cookie-based session extraction
-signToken(), verifyToken(), getUserFromRequest()
-requireAuth.js
-HOF that guards API routes — returns 401 if no valid JWT cookie, populates req.user on success
-requireAuth()
 spotify.js
 Parse Spotify URLs; scrape public embed page for playlist + track data
 extractPlaylistId(), getPublicPlaylistData()
@@ -61,8 +53,6 @@ searchYouTubeTrack(), batchMatchTracks()
 models/
 File
 Schema Fields
-User.js
-email (unique, lowercased), passwordHash (bcrypt, never returned), createdAt
 Track.js
 spotifyId (unique), name, artists[], album, duration (ms), albumImage, youtubeVideoId (nullable)
 Playlist.js
@@ -73,22 +63,6 @@ Route
 Method
 Rate Limited
 Description
-auth/signup.js
-POST
-No
-Create account (email + password); sets HTTP-only JWT cookie (7d)
-auth/login.js
-POST
-No
-Authenticate; sets HTTP-only JWT cookie (7d)
-auth/logout.js
-POST
-No
-Clears token cookie
-auth/me.js
-GET
-No
-Return current user from JWT cookie, or 401
 import-playlist.js
 POST
 Yes (10/min)
@@ -96,7 +70,7 @@ Scrape Spotify → upsert tracks → filter uncached tracks → background yt-se
 playlist/[id].js
 GET
 No
-Return playlist + populated tracks by MongoDB \_id
+Return playlist + populated tracks by MongoDB _id
 stream/[trackId].js
 GET
 No
@@ -110,15 +84,12 @@ components/
 Component
 Props
 Notes
-GlobalPlayer
-none
-Mounted ONCE in \_app.js. Creates the YT.Player instance (1×1px, opacity:0) and shares it via PlayerContext. Survives page navigation. iOS Safari requires non-zero dimensions — do NOT use display:none or visibility:hidden.
 ImportForm
 onImportSuccess(playlist)
 Calls POST /api/import-playlist; manages loading/error state
 Player
 track, playlist, currentIndex, onTrackChange
-Manages window.YT.Player lifecycle via PlayerContext; auto-advance on track end
+Manages window.YT.Player lifecycle; auto-advance on track end
 TrackList
 tracks[], currentTrackId, onTrackSelect
 Pure display; highlights currently playing track
@@ -131,22 +102,22 @@ Static top bar
 
 Playlist Import Pipeline (Step by Step)
 POST /api/import-playlist { url }
+  1. extractPlaylistId(url)              → playlistId string
+  2. connectDB()
+  3. getPublicPlaylistData(playlistId)   → { info, tracks[] }
+  4. For each track:
+       Track.findOneAndUpdate({ spotifyId }, ..., { upsert: true })
+       Collect _id; check if `youtubeVideoId` exists (Global Cache).
+  5. Playlist.findOneAndUpdate({ spotifyPlaylistId }, ..., { upsert: true })
+     → status: 'matching', importProgress: 50
+  6. res.status(200).json(...)           ← respond BEFORE background work
+  7. matchTracksInBackground(uncachedTracksOnly, playlist._id)  ← fire & forget
+       batchMatchTracks(uncachedTracks, 1000ms delay)
+         searchYouTubeTrack(name, artist, durationMs) per track
+         Track.updateOne → youtubeVideoId
+       If yt-search rate-limits → Playlist.updateOne → status: 'paused', halt.
+       If successful → Playlist.updateOne → status: 'ready', importProgress: 100
 
-1. extractPlaylistId(url) → playlistId string
-2. connectDB()
-3. getPublicPlaylistData(playlistId) → { info, tracks[] }
-4. For each track:
-   Track.findOneAndUpdate({ spotifyId }, ..., { upsert: true })
-   Collect \_id; check if `youtubeVideoId` exists (Global Cache).
-5. Playlist.findOneAndUpdate({ spotifyPlaylistId }, ..., { upsert: true })
-   → status: 'matching', importProgress: 50
-6. res.status(200).json(...) ← respond BEFORE background work
-7. matchTracksInBackground(uncachedTracksOnly, playlist.\_id) ← fire & forget
-   batchMatchTracks(uncachedTracks, 1000ms delay)
-   searchYouTubeTrack(name, artist, durationMs) per track
-   Track.updateOne → youtubeVideoId
-   If yt-search rate-limits → Playlist.updateOne → status: 'paused', halt.
-   If successful → Playlist.updateOne → status: 'ready', importProgress: 100
 
 YouTube Search & Scoring (yt-search)
 searchYouTubeTrack(trackName, artistName, durationMs):
@@ -172,22 +143,22 @@ PAUSED → stop interval
 ENDED → auto-advance: onTrackChange(playlist[currentIndex + 1], currentIndex + 1)
 Volume: player.setVolume(0–100) (YouTube scale)
 Seek: player.seekTo(seconds, true)
-PlayerContext / GlobalPlayer architecture
-GlobalPlayer.js is mounted once in \_app.js and creates a single YT.Player instance via PlayerContext. All components consume playback state/actions via usePlayer(). Do NOT create additional YT.Player instances or duplicate the script tag.
+Polling Pattern (index.js)
 While activePlaylist.status === 'matching', a setInterval every 3 seconds calls GET /api/playlist/[id]. On status === 'ready', 'paused', or 'error', the interval is cleared. Cleanup via useEffect return function.
 Styling Conventions
 All styles use SCSS CSS Modules — never inline styles or Tailwind
-Design tokens (colors, spacing) live in styles/\_variables.scss — always use variables, never hardcode hex values
+Design tokens (colors, spacing) live in styles/_variables.scss — always use variables, never hardcode hex values
 Each component has its own .module.scss file (e.g., Player.js → Player.module.scss)
 Global resets/base styles only in styles/globals.scss
 Import pattern: import styles from '@/styles/ComponentName.module.scss'
 Mongo Upsert Pattern
 Used throughout to avoid duplicates. Example:
 await Track.findOneAndUpdate(
-{ spotifyId: t.spotifyId }, // filter
-{ $setOnInsert: { name, artists, ... } }, // only set on first insert
-{ upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
+  { spotifyId: t.spotifyId },          // filter
+  { $setOnInsert: { name, artists, ... } }, // only set on first insert
+  { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
 );
+
 
 For playlists, data is always updated (not $setOnInsert) so re-imports refresh metadata.
 Rate Limiter Usage
@@ -195,6 +166,7 @@ Rate Limiter Usage
 export default withRateLimit(handler, maxRequests, windowMs);
 // e.g.:
 export default withRateLimit(handler, 10, 60000); // 10/min
+
 
 The limiter is keyed by x-forwarded-for header or req.socket.remoteAddress. It sets X-RateLimit-Remaining and X-RateLimit-Reset response headers.
 Image Domains
@@ -210,15 +182,13 @@ Do not proxy audio bytes through the server (no ytdl-core or streams)
 Do not add Spotify OAuth or Spotify developer API calls
 Do not switch to the Next.js App Router
 Do not use relative imports (../../) — always use @/ alias
-Do not add Redis or CDN caching without a specific feature request
+Do not add Redis, sessions, or auth without a specific feature request
 Do not create .md summary files documenting changes — edit source files only
 Do not hardcode API keys; always read from process.env
 Do not await background tasks before responding to the client
 Common Pitfalls
 Pitfall
 Solution
-JWT_SECRET missing
-Define JWT_SECRET in .env.local — lib/auth.js throws at startup if it is missing
 Mongoose model already registered error
 Use `mongoose.models.Model
 connectDB called outside handler
@@ -229,3 +199,5 @@ window.YT not defined
 YouTube IFrame API loads async; check window.YT && window.YT.Player before calling new player
 Spotify scrape fails
 getPublicPlaylistData throws with a user-friendly message — let it propagate to the 500 handler
+
+

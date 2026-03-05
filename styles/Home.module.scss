@@ -1,110 +1,216 @@
 @use "variables" as *;
 
-.app {
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-    padding-bottom: $player-height;
+// ── Hero Greeting ────────────────────────────────────────────
+.hero {
+    margin-bottom: 32px;
 }
 
-.main {
-    display: flex;
-    flex: 1;
-    margin-top: $navbar-height;
+.greeting {
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: $text-primary;
+    margin: 0 0 6px;
+    line-height: 1.2;
 }
 
-// ── Sidebar ──────────────────────────────────────────────────
-.sidebar {
-    width: $sidebar-width;
-    min-width: $sidebar-width;
-    background: $bg-secondary;
-    border-right: 1px solid $bg-elevated;
-    padding: 20px 12px;
-    height: calc(100vh - $navbar-height - $player-height);
-    overflow-y: auto;
-    position: sticky;
-    top: $navbar-height;
+.greetingName {
+    color: $accent;
 }
 
-.sidebarTitle {
-    font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
+.greetingSub {
+    font-size: 0.9375rem;
     color: $text-secondary;
-    margin-bottom: 16px;
-    padding: 0 8px;
+    margin: 0;
 }
 
-.sidebarEmpty {
-    color: $text-muted;
-    font-size: 0.875rem;
-    padding: 0 8px;
-    line-height: 1.5;
+// ── Import Card ──────────────────────────────────────────────
+.importCard {
+    background: $bg-secondary;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: $radius-xl;
+    padding: 24px 28px;
+    margin-bottom: 40px;
 }
 
-.playlistGrid {
+.importCardHeader {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
 }
 
-// ── Content ──────────────────────────────────────────────────
-.content {
-    flex: 1;
-    padding: 24px 32px;
-    min-width: 0;
-    height: calc(100vh - $navbar-height - $player-height);
-    overflow-y: auto;
+.importCardIcon {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    color: #1ed760;
+    opacity: 0.9;
 }
 
-// ── Playlist Header ──────────────────────────────────────────
-.playlistHeader {
+.importCardTitle {
+    font-size: 1rem;
+    font-weight: 700;
+    color: $text-primary;
+    margin: 0 0 3px;
+}
+
+.importCardDesc {
+    font-size: 0.8125rem;
+    color: $text-secondary;
+    margin: 0;
+}
+
+// ── Playlist View ────────────────────────────────────────────
+.playlistView {
+    position: relative;
+    overflow: hidden;
+    border-radius: $radius-xl;
+    margin-bottom: 32px;
+    padding: 40px 32px;
+    background: $bg-secondary;
+}
+
+.playlistBg {
+    position: absolute;
+    inset: -20px;
+    background-size: cover;
+    background-position: center;
+    filter: blur(48px) saturate(1.4);
+    opacity: 0.28;
+    z-index: 0;
+}
+
+.playlistBgOverlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        to right,
+        rgba(#0b0b0f, 0.92) 0%,
+        rgba(#0b0b0f, 0.55) 100%
+    );
+    z-index: 1;
+}
+
+.playlistContent {
+    position: relative;
+    z-index: 2;
     display: flex;
     align-items: flex-end;
-    gap: 24px;
-    margin: 32px 0 24px;
-    padding-bottom: 24px;
-    border-bottom: 1px solid $bg-elevated;
+    gap: 28px;
+}
+
+.playlistArtWrap {
+    flex-shrink: 0;
 }
 
 .playlistCover {
-    width: 180px;
-    height: 180px;
-    border-radius: $radius-md;
+    width: 200px;
+    height: 200px;
+    border-radius: $radius-xl;
     object-fit: cover;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+    display: block;
+}
+
+.playlistArtPlaceholder {
+    width: 200px;
+    height: 200px;
+    border-radius: $radius-xl;
+    background: linear-gradient(135deg, $bg-surface, #2a1f60);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: $text-muted;
+
+    svg {
+        width: 56px;
+        height: 56px;
+        opacity: 0.5;
+    }
 }
 
 .playlistMeta {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
+    min-width: 0;
 }
 
 .playlistLabel {
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.14em;
     color: $text-secondary;
 }
 
 .playlistName {
     font-size: 2.5rem;
     font-weight: 800;
-    line-height: 1.1;
-    letter-spacing: -0.02em;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    color: $text-primary;
+    margin: 0;
+    @include truncate;
 }
 
 .playlistDesc {
     color: $text-secondary;
     font-size: 0.875rem;
+    margin: 0;
 }
 
-.statusBadge {
-    color: $accent;
-    font-weight: 500;
+// ── Match Progress ───────────────────────────────────────────
+.matchProgress {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.progressBar {
+    width: 180px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: $radius-full;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.progressFill {
+    height: 100%;
+    background: $accent;
+    border-radius: $radius-full;
+    transition: width 0.6s ease;
+}
+
+.progressLabel {
+    font-size: 0.75rem;
+    color: $text-muted;
+    white-space: nowrap;
+}
+
+// ── Status Pill ──────────────────────────────────────────────
+.statusPill {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: $radius-full;
+    background: $warning-dim;
+    color: $warning;
+    width: fit-content;
+}
+
+.status_matching {
+    background: rgba(59, 130, 246, 0.12);
+    color: #3b82f6;
+}
+
+.status_error {
+    background: rgba(255, 79, 79, 0.12);
+    color: $danger;
 }
 
 // ── Loading ──────────────────────────────────────────────────
@@ -113,11 +219,11 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 60px 0;
+    padding: 80px 0;
     color: $text-secondary;
 
     p {
-        margin-top: 12px;
+        margin-top: 14px;
         font-size: 0.875rem;
     }
 }
@@ -125,10 +231,10 @@
 .spinner {
     width: 32px;
     height: 32px;
-    border: 3px solid $bg-elevated;
+    border: 3px solid rgba(255, 255, 255, 0.08);
     border-top-color: $accent;
     border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+    animation: spin 0.75s linear infinite;
 }
 
 @keyframes spin {
@@ -137,68 +243,107 @@
     }
 }
 
-// ── Login CTA ────────────────────────────────────────────────
+// ── Guest CTA ────────────────────────────────────────────────
 .loginCta {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 80px 24px;
+    padding: 100px 24px;
     text-align: center;
+}
 
-    h2 {
-        font-size: 2rem;
-        font-weight: 800;
-        margin-bottom: 8px;
-    }
+.ctaLogo {
+    margin-bottom: 24px;
 
-    p {
-        color: $text-secondary;
-        font-size: 1rem;
-        margin-bottom: 24px;
+    svg {
+        width: 64px;
+        height: 64px;
     }
 }
 
+.ctaTitle {
+    font-size: 2.5rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: $text-primary;
+    margin: 0 0 12px;
+}
+
+.ctaSubtitle {
+    color: $text-secondary;
+    font-size: 1rem;
+    margin: 0 0 32px;
+    max-width: 380px;
+    line-height: 1.6;
+}
+
+.ctaActions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
 .ctaBtn {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
     padding: 12px 28px;
     background: $accent;
-    color: #000;
+    color: #fff;
     font-size: 0.9375rem;
     font-weight: 700;
     border-radius: $radius-full;
     transition:
         background $transition-fast,
-        transform $transition-fast;
+        box-shadow $transition-fast;
 
     &:hover {
         background: $accent-hover;
-        transform: scale(1.02);
+        box-shadow: $accent-glow;
+    }
+}
+
+.ctaBtnSecondary {
+    display: inline-flex;
+    align-items: center;
+    padding: 12px 28px;
+    background: transparent;
+    color: $text-primary;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    border-radius: $radius-full;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    transition: border-color $transition-fast;
+
+    &:hover {
+        border-color: rgba(255, 255, 255, 0.35);
     }
 }
 
 // ── Responsive ───────────────────────────────────────────────
-@media (max-width: 768px) {
-    .sidebar {
-        display: none;
-    }
-
-    .content {
-        padding: 16px;
-    }
-
-    .playlistHeader {
+@media (max-width: 900px) {
+    .playlistContent {
         flex-direction: column;
         align-items: center;
         text-align: center;
     }
 
-    .playlistCover {
-        width: 140px;
-        height: 140px;
+    .playlistCover,
+    .playlistArtPlaceholder {
+        width: 150px;
+        height: 150px;
     }
 
     .playlistName {
         font-size: 1.75rem;
+    }
+
+    .matchProgress {
+        justify-content: center;
+    }
+
+    .statusPill {
+        margin: 0 auto;
     }
 }

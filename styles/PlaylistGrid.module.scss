@@ -1,0 +1,25 @@
+@use "variables" as *;
+
+.section {
+    margin-bottom: 40px;
+}
+
+.title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: $text-primary;
+    margin: 0 0 20px;
+    letter-spacing: -0.01em;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 20px;
+}
+
+.empty {
+    color: $text-muted;
+    font-size: 0.875rem;
+    padding: 24px 0;
+}

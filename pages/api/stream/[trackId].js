@@ -1,6 +1,5 @@
 import { connectDB } from '@/lib/mongodb';
 import Track from '@/models/Track';
-import mongoose from 'mongoose';
 
 /**
  * GET /api/stream/[trackId]
@@ -16,10 +15,6 @@ export default async function handler(req, res) {
 
     if (!trackId) {
         return res.status(400).json({ error: 'Missing trackId' });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(trackId)) {
-        return res.status(400).json({ error: 'Invalid ID format' });
     }
 
     try {

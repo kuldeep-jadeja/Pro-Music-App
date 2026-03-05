@@ -109,3 +109,6 @@ export default function Signup() {
         </>
     );
 }
+
+// Opt out of AppLayout — auth pages have their own standalone layout
+Signup.getLayout = (page) => page;

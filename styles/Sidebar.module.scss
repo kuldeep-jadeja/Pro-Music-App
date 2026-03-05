@@ -1,0 +1,249 @@
+@use "variables" as *;
+
+// ── Sidebar shell ─────────────────────────────────────────────
+.sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: $sidebar-width;
+    background: $bg-secondary;
+    border-right: 1px solid $bg-elevated;
+    display: flex;
+    flex-direction: column;
+    padding: 20px 12px 16px;
+    z-index: 110;
+    overflow-y: auto;
+    overflow-x: hidden;
+    transition: transform $transition-normal;
+
+    scrollbar-width: none;
+    &::-webkit-scrollbar {
+        display: none;
+    }
+
+    @media (max-width: $breakpoint-mobile) {
+        transform: translateX(-100%);
+    }
+}
+
+// ── Sidebar open state (mobile) ───────────────────────────────
+.open {
+    transform: translateX(0) !important;
+}
+
+// ── Logo ──────────────────────────────────────────────────────
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 8px;
+    margin-bottom: 32px;
+    flex-shrink: 0;
+}
+
+.logoIcon {
+    color: $accent;
+    flex-shrink: 0;
+}
+
+.logoText {
+    font-size: 1.25rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: $text-primary;
+}
+
+// ── Nav section ───────────────────────────────────────────────
+.nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 32px;
+}
+
+.navLabel {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: $text-muted;
+    padding: 0 12px;
+    margin-bottom: 6px;
+    margin-top: 2px;
+}
+
+.navItem {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: $radius-lg;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: $text-secondary;
+    transition:
+        background $transition-fast,
+        color $transition-fast;
+    position: relative;
+
+    &:hover {
+        background: rgba($accent, 0.08);
+        color: $text-primary;
+    }
+
+    &.active {
+        background: rgba($accent, 0.12);
+        color: $text-primary;
+
+        // Left accent bar
+        &::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 20px;
+            background: $accent;
+            border-radius: 0 $radius-full $radius-full 0;
+        }
+
+        svg {
+            color: $accent;
+        }
+    }
+}
+
+// ── Library (playlist list) ───────────────────────────────────
+.library {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.playlistList {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+
+    scrollbar-width: thin;
+    scrollbar-color: $bg-elevated transparent;
+
+    &::-webkit-scrollbar {
+        width: 4px;
+    }
+    &::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    &::-webkit-scrollbar-thumb {
+        background: $bg-elevated;
+        border-radius: $radius-full;
+    }
+}
+
+.playlistItem {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border-radius: $radius-md;
+    width: 100%;
+    text-align: left;
+    color: $text-secondary;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition:
+        background $transition-fast,
+        color $transition-fast;
+    flex-shrink: 0;
+
+    &:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: $text-primary;
+    }
+
+    &.playlistActive {
+        background: rgba($accent, 0.1);
+        color: $text-primary;
+    }
+}
+
+.plCover {
+    width: 36px;
+    height: 36px;
+    border-radius: $radius-sm;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.plCoverPlaceholder {
+    width: 36px;
+    height: 36px;
+    border-radius: $radius-sm;
+    background: linear-gradient(135deg, $accent 0%, $accent-secondary 100%);
+    opacity: 0.4;
+    flex-shrink: 0;
+}
+
+.plName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+
+// ── User strip ────────────────────────────────────────────────
+.userInfo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 8px;
+    margin-top: auto;
+    flex-shrink: 0;
+    border-top: 1px solid $bg-elevated;
+    padding-top: 14px;
+}
+
+.avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: $radius-full;
+    background: linear-gradient(135deg, $accent 0%, $accent-secondary 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+}
+
+.userEmail {
+    font-size: 0.8125rem;
+    color: $text-muted;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+
+// ── Guest nav item hint ───────────────────────────────────────
+.navItemGuest {
+    opacity: 0.5;
+    cursor: default;
+    pointer-events: auto; // allow click to redirect to login
+}
+
+.lockHint {
+    margin-left: auto;
+    font-size: 0.65rem;
+    opacity: 0.7;
+}
