@@ -2,6 +2,7 @@ import { connectDB } from '@/lib/mongodb';
 import { requireAuth } from '@/lib/requireAuth';
 import Playlist from '@/models/Playlist';
 import '@/models/Track'; // Register Track schema so Playlist.populate('tracks') works
+import mongoose from 'mongoose';
 
 /**
  * GET /api/playlist/[id]
@@ -16,6 +17,10 @@ async function handler(req, res) {
 
     if (!id) {
         return res.status(400).json({ error: 'Missing playlist ID' });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ error: 'Invalid ID format' });
     }
 
     try {

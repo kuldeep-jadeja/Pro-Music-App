@@ -240,13 +240,15 @@ export default function Home() {
                     {activePlaylist.owner} &middot; {activePlaylist.trackCount} tracks
                     {activePlaylist.status !== 'ready' && (
                       <span className={styles.statusBadge}>
-                        {activePlaylist.status === 'matching'
-                          ? ' — Finding YouTube matches...'
-                          : activePlaylist.status === 'paused'
-                            ? ' — Paused (rate limited)'
-                            : activePlaylist.status === 'error'
-                              ? ' — Error'
-                              : ''}
+                        {activePlaylist.status === 'imported'
+                          ? ' — Preparing playlist...'
+                          : activePlaylist.status === 'matching'
+                            ? ' — Finding YouTube matches...'
+                            : activePlaylist.status === 'paused'
+                              ? ' — Paused (rate limited)'
+                              : activePlaylist.status === 'error'
+                                ? ' — Error'
+                                : ''}
                       </span>
                     )}
                   </p>

@@ -4,7 +4,9 @@ import { requireAuth } from '@/lib/requireAuth';
 import {
     extractPlaylistId,
     getPublicPlaylistData,
+    runBackgroundItunesEnrichment,
 } from '@/lib/spotify';
+import { generateFingerprint } from '@/lib/trackFingerprint';
 import { batchMatchTracks } from '@/lib/youtube';
 import Playlist from '@/models/Playlist';
 import Track from '@/models/Track';
@@ -59,6 +61,7 @@ async function handler(req, res) {
                         album: t.album,
                         duration: t.duration,
                         albumImage: t.albumImage,
+                        fingerprint: generateFingerprint(t.name, t.artists),
                     },
                     $setOnInsert: {
                         importedAt: new Date(),
@@ -135,7 +138,14 @@ async function handler(req, res) {
             },
         });
 
-        // 7. Background YouTube matching — fire-and-forget (only uncached tracks)
+        // 7a. Background iTunes enrichment — fire-and-forget.
+        // Enriches tracks missing album name / art and persists results to MongoDB.
+        // Failures are caught inside runBackgroundItunesEnrichment and logged only.
+        runBackgroundItunesEnrichment(rawTracks).catch((err) =>
+            console.error('[iTunes] Unexpected enrichment error:', err.message)
+        );
+
+        // 7b. Background YouTube matching — fire-and-forget (only uncached tracks)
         //    CRITICAL: Atomic guard prevents duplicate background tasks.
         //    We only flip to 'matching' if the playlist is NOT already in
         //    'matching' status.  If the atomic update returns null, another

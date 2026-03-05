@@ -1,7 +1,5 @@
 <div align="center">
 
-![Demus Banner](https://via.placeholder.com/800x300.png?text=Demus+-+Your+Music,+Your+Way)
-
 # Demus
 
 **Your Music, Your Way**
@@ -45,19 +43,22 @@ Demus is engineered to scale gracefully while keeping operational costs intimate
 
 - **Zero-Quota Hybrid Architecture:** We completely bypass the strict 10,000 unit YouTube Data API limits. By utilizing server-side HTML scraping (`yt-search`) combined with a bespoke, intelligent exact-match scoring algorithm, we can resolve thousands of tracks without hitting arbitrary API walls.
 - **Global Track Caching:** MongoDB acts as a universal brain. If User A spends the CPU cycles to import "Bohemian Rhapsody", User B gets it instantly. Redundant searches are practically eliminated through efficient `BulkWrite` database operations.
-- **Masterful Concurrency Control:** Massive 500+ track imports would normally trigger an immediate IP ban. Demus utilizes a custom in-memory global queue and strict semaphore system to throttle, backoff, and batch outbound scraping requests, keeping our backend completely invisible to platform rate limiters.
+- **Sequential Concurrency Control:** `batchMatchTracks` processes tracks one at a time with a 1-second delay between each `yt-search` call, mimicking human browsing to avoid IP-level rate limits. (A global semaphore for multi-user concurrency is recommended in `AUDIT_REPORT.md`.)
 - **Cost-Free Streaming Architecture:** Our server _never_ proxies a single audio byte. By serving the audio via a client-side hidden YouTube IFrame, our cloud egress and bandwidth costs remain exactly zero, regardless of how many users are streaming concurrently.
 
 <br />
 
 ## 🛠️ Tech Stack
 
-| Category               | Technology                    | Purpose                                                                                  |
-| :--------------------- | :---------------------------- | :--------------------------------------------------------------------------------------- |
-| **Frontend Framework** | **Next.js 16** (Pages Router) | Lightning-fast SSR, API routes, and seamless client-side routing.                        |
-| **Styling**            | **SCSS Modules**              | Component-scoped, deeply maintainable, and heavily variable-driven styling architecture. |
-| **Database & Cache**   | **MongoDB & Mongoose**        | Persistent global caching layer and playlist relationship management.                    |
-| **Data Scraping**      | `yt-search`                   | High-performance Server-side YouTube DOM scraping engine.                                |
+| Category               | Technology                    | Purpose                                                                    |
+| :--------------------- | :---------------------------- | :------------------------------------------------------------------------- |
+| **Frontend Framework** | **Next.js 16** (Pages Router) | SSR, API routes, and seamless client-side routing.                         |
+| **Styling**            | **SCSS Modules**              | Component-scoped styles with a shared `_variables.scss` design-token file. |
+| **Database & Cache**   | **MongoDB & Mongoose**        | Persistent global track cache and playlist/user storage.                   |
+| **YouTube Matching**   | `yt-search`                   | Server-side YouTube search scraping — no API key required.                 |
+| **Spotify Parsing**    | `spotify-url-info`            | Scrapes the Spotify public embed page for metadata — no Spotify API key.   |
+| **Authentication**     | `jsonwebtoken` + `bcrypt`     | JWT-signed sessions and bcrypt password hashing.                           |
+| **HTTP Cookies**       | `cookie`                      | Cookie serialization/parsing for HTTP-only JWT storage.                    |
 
 <br />
 
@@ -68,8 +69,7 @@ Follow these steps to spin up your own instance of Demus locally.
 ### Prerequisites
 
 - Node.js (v18+)
-- A MongoDB Cluster (MongoDB Atlas or Local Instance)
-- Spotify Developer Credentials (Client ID & Secret)
+- A MongoDB instance (MongoDB Atlas free tier or local)
 
 ### Installation
 
@@ -87,15 +87,14 @@ Follow these steps to spin up your own instance of Demus locally.
     ```
 
 3.  **Environment Configuration:**
-    Create a `.env.local` file in the root directory and populate it with your keys:
+    Create a `.env.local` file in the root directory:
 
     ```env
-    # MongoDB Configuration
+    # Required: MongoDB connection string
     MONGODB_URI=mongodb+srv://<user>:<password>@cluster.mongodb.net/demus?retryWrites=true&w=majority
 
-    # Spotify API Credentials
-    SPOTIFY_CLIENT_ID=your_spotify_client_id_here
-    SPOTIFY_CLIENT_SECRET=your_spotify_client_secret_here
+    # Required: Secret used to sign JWTs (any long random string)
+    JWT_SECRET=your_super_secret_key_here
     ```
 
 4.  **Fire it up:**
@@ -113,6 +112,14 @@ Follow these steps to spin up your own instance of Demus locally.
 > Demus is an open-source proof-of-concept demonstrating advanced web scraping, concurrency control, global caching mechanisms, and Next.js architecture. It relies heavily on public DOM scraping which is inherently volatile and subject to break if platforms push major structural updates. Please ensure you review and comply with the Terms of Service of any platform you interact with using this software.
 
 ## Data Models
+
+### `User`
+
+```
+email          String  (unique, required, lowercased)
+passwordHash   String  (required — bcrypt hash, never returned in responses)
+createdAt      Date
+```
 
 ### `Track`
 
@@ -150,6 +157,48 @@ Indexed on `{ spotifyPlaylistId: 1 }`.
 ---
 
 ## API Reference
+
+### Authentication
+
+#### `POST /api/auth/signup`
+
+Create a new account.
+
+**Request body:** `{ "email": "user@example.com", "password": "yourpassword" }`
+
+**Response `201`:** `{ "user": { "id": "...", "email": "user@example.com" } }`
+
+Sets an HTTP-only `token` cookie (7-day JWT).
+
+---
+
+#### `POST /api/auth/login`
+
+Authenticate with email and password.
+
+**Request body:** `{ "email": "user@example.com", "password": "yourpassword" }`
+
+**Response `200`:** `{ "user": { "id": "...", "email": "user@example.com" } }`
+
+Sets an HTTP-only `token` cookie (7-day JWT).
+
+---
+
+#### `POST /api/auth/logout`
+
+Clears the `token` cookie.
+
+**Response `200`:** `{ "success": true }`
+
+---
+
+#### `GET /api/auth/me`
+
+Returns the currently authenticated user, or `401` if not logged in. Used by the frontend to restore session state on page load.
+
+**Response `200`:** `{ "user": { "id": "...", "email": "user@example.com" } }`
+
+---
 
 ### `POST /api/import-playlist`
 
@@ -265,6 +314,20 @@ Manually trigger YouTube matching for a single track. Useful for retrying failed
 
 ## Key Libraries & Modules
 
+### `lib/auth.js`
+
+| Export                    | Description                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------- |
+| `signToken(userId)`       | Signs a 7-day JWT with `JWT_SECRET`                                                         |
+| `verifyToken(token)`      | Verifies and decodes a JWT; returns payload or `null`                                       |
+| `getUserFromRequest(req)` | Reads the `token` cookie, verifies the JWT, and returns a lean User doc (no `passwordHash`) |
+
+### `lib/requireAuth.js`
+
+| Export                 | Description                                                                                           |
+| ---------------------- | ----------------------------------------------------------------------------------------------------- |
+| `requireAuth(handler)` | HOF — returns `401` if no valid session cookie; otherwise sets `req.user` and calls the inner handler |
+
 ### `lib/spotify.js`
 
 | Export                              | Description                                                         |
@@ -308,17 +371,14 @@ Create `.env.local` in the project root:
 # Required: MongoDB connection string
 MONGODB_URI=mongodb+srv://<user>:<password>@cluster.mongodb.net/demus?retryWrites=true&w=majority
 
-# Required: YouTube Data API v3 key
-YOUTUBE_API_KEY=AIza...
+# Required: Secret used to sign JWTs (any long random string)
+JWT_SECRET=your_super_secret_key_here
 ```
 
-### Getting a YouTube API Key
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create or select a project
-3. Enable the **YouTube Data API v3**
-4. Create an **API Key** under Credentials
-5. (Recommended) Restrict the key to `YouTube Data API v3` and your domain
+| Variable      | Required | Description                 |
+| ------------- | -------- | --------------------------- |
+| `MONGODB_URI` | Yes      | MongoDB connection string   |
+| `JWT_SECRET`  | Yes      | Secret key for signing JWTs |
 
 ### Getting a MongoDB URI
 
@@ -333,20 +393,18 @@ YOUTUBE_API_KEY=AIza...
 
 - Node.js 18+
 - MongoDB instance (local or Atlas)
-- YouTube Data API v3 key
 
 ### Installation
 
 ```bash
 # Clone the repository
 git clone <repo-url>
-cd spotify_knockoff
+cd demus
 
 # Install dependencies
 npm install
 
-# Create environment file
-# Create .env.local and add MONGODB_URI and YOUTUBE_API_KEY
+# Create .env.local with MONGODB_URI and JWT_SECRET (see Environment Variables above)
 ```
 
 ### Development
@@ -384,7 +442,7 @@ POST /api/import-playlist
                     │
                     ▼
             For each unmatched track:
-            searchYouTubeTrack() → YouTube Data API v3
+            searchYouTubeTrack() → yt-search (no API key)
             Update Track.youtubeVideoId
                     │
                     ▼
@@ -416,8 +474,8 @@ YouTube IFrame API (hidden 0×0 iframe)
 
 **Step 1 — Search**
 
-- Query: `"{trackName} - {artistName} Official Audio"`
-- Filter: Music category (categoryId: 10), max 5 results
+- Query: `"{trackName} - {artistName} Official Audio"` via `yt-search`
+- Up to 5 results are evaluated
 
 **Step 2 — Score & Rank**
 
@@ -436,7 +494,7 @@ Each candidate video receives a score:
 
 The highest-scoring video ID is returned. First result is used as fallback if no video exceeds score 0.
 
-**Batch matching** (`batchMatchTracks`) processes tracks sequentially with a configurable delay (default 300ms) to avoid YouTube API quota exhaustion.
+**Batch matching** (`batchMatchTracks`) processes tracks sequentially with a configurable delay (default 1000ms) to avoid triggering IP-level rate limiting from YouTube.
 
 ---
 
@@ -477,9 +535,9 @@ All styles use **SCSS CSS Modules** with a shared `_variables.scss` design token
 
 ## Known Limitations
 
-- **YouTube API Quota:** The YouTube Data API v3 free tier allows ~10,000 units/day. Each track match costs ~102 units (1 search + 1 videos lookup). This gives approximately **98 full-track imports** per day on the free tier.
 - **In-Memory Rate Limiting:** Rate limits reset on server restart and are not distributed — unsuitable for multi-instance deployments.
-- **Spotify Public Playlists Only:** Private or collaborative playlists cannot be scraped.
+- **Spotify Public Playlists Only:** Private or collaborative playlists cannot be scraped via the public embed.
 - **YouTube Match Quality:** Matching is heuristic. Rare tracks, instrumentals, or tracks with unusual titles may match incorrectly.
-- **No Authentication:** All playlists are shared globally — no user accounts or session isolation.
-- **No Caching Layer:** Every playlist load hits MongoDB directly; no Redis or CDN caching in place.
+- **No Concurrency Guard (at scale):** Multiple simultaneous playlist imports each run their own `batchMatchTracks` loop. At high concurrency this can trigger IP-level rate limiting from YouTube. See `AUDIT_REPORT.md` for the recommended global semaphore fix.
+- **No Startup Recovery:** If the server restarts while a playlist is `'matching'`, the status is never automatically recovered. Affected playlists remain stuck until manually retried. See `AUDIT_REPORT.md` for the recommended startup sweep.
+- **No Redis / CDN Caching Layer:** Every playlist load hits MongoDB directly.

@@ -1,6 +1,7 @@
 import { connectDB } from '@/lib/mongodb';
 import Track from '@/models/Track';
-import { findYouTubeMatch } from '@/lib/youtubeMatcher';
+import { searchYouTubeTrack, enqueue } from '@/lib/youtube';
+import mongoose from 'mongoose';
 
 /**
  * POST /api/match-youtube
@@ -59,7 +60,12 @@ export default async function handler(req, res) {
         }
 
         // ── 3. Scrape YouTube for the best match ──────────────────
-        const youtubeId = await findYouTubeMatch(artist, title);
+        // Route through the global queue to prevent concurrent yt-search
+        // requests from different callers (same IP-block protection used by
+        // batchMatchTracks during playlist import).
+        const youtubeId = await enqueue(() =>
+            searchYouTubeTrack(title, artist, track?.duration ?? null)
+        );
 
         if (!youtubeId) {
             return res.status(404).json({ error: 'No YouTube match found' });

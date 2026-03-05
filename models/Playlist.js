@@ -56,6 +56,10 @@ const PlaylistSchema = new mongoose.Schema(
             type: Number, // 0-100
             default: 0,
         },
+        matchedCount: {
+            type: Number, // tracks successfully matched to a YouTube video
+            default: 0,
+        },
         errorMessage: String,
     },
     { timestamps: true }
@@ -64,5 +68,7 @@ const PlaylistSchema = new mongoose.Schema(
 // Compound unique index: same Spotify playlist can exist once per user, but
 // different users may each import the same playlist independently.
 PlaylistSchema.index({ spotifyPlaylistId: 1, user: 1 }, { unique: true });
+
+PlaylistSchema.index({ status: 1, updatedAt: 1 });
 
 export default mongoose.models.Playlist || mongoose.model('Playlist', PlaylistSchema);

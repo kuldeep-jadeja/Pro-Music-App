@@ -253,10 +253,14 @@ export function PlayerProvider({ children }) {
         const idx = currentIndexRef.current;
         if (!q || idx >= q.length - 1) return;
 
+        // Skip tracks that have no YouTube match — only play matched tracks.
         for (let i = idx + 1; i < q.length; i++) {
-            playTrack(q[i], i);
-            return;
+            if (q[i].youtubeVideoId) {
+                playTrack(q[i], i);
+                return;
+            }
         }
+        // No playable track found ahead — stop playback silently.
     }, [playTrack]);
 
     const playPrevious = useCallback(() => {
@@ -264,10 +268,14 @@ export function PlayerProvider({ children }) {
         const idx = currentIndexRef.current;
         if (!q || idx <= 0) return;
 
+        // Skip tracks that have no YouTube match — only play matched tracks.
         for (let i = idx - 1; i >= 0; i--) {
-            playTrack(q[i], i);
-            return;
+            if (q[i].youtubeVideoId) {
+                playTrack(q[i], i);
+                return;
+            }
         }
+        // No playable track found behind — stop playback silently.
     }, [playTrack]);
 
     // Keep ref in sync so the YT onStateChange closure can call the latest version
