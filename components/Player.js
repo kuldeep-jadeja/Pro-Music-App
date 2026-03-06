@@ -286,7 +286,7 @@ export default function Player({
                 </div>
             </div>
 
-            {/* Controls */}
+            {/* Controls — buttons only; progress bar is a sibling grid item */}
             <div className={styles.controls}>
                 <div className={styles.buttons}>
                     <button
@@ -324,18 +324,6 @@ export default function Player({
                             <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
                         </svg>
                     </button>
-                </div>
-
-                {/* Progress Bar */}
-                <div className={styles.progressRow}>
-                    <span className={styles.time}>{formatTime(currentTime)}</span>
-                    <div className={styles.progressBar} onClick={handleSeek}>
-                        <div
-                            className={styles.progressFill}
-                            style={{ width: `${progressPct}%` }}
-                        />
-                    </div>
-                    <span className={styles.time}>{formatTime(duration)}</span>
                 </div>
             </div>
 
@@ -383,6 +371,18 @@ export default function Player({
                         <span className={styles.volumeOverlayLabel}>{volume}%</span>
                     </div>
                 )}
+            </div>
+
+            {/* Progress Bar — row 2 on mobile (full width), row 2 col 2 on desktop */}
+            <div className={styles.progressRow}>
+                <span className={styles.time}>{formatTime(currentTime)}</span>
+                <div className={styles.progressBar} onClick={handleSeek}>
+                    <div
+                        className={styles.progressFill}
+                        style={{ width: `${progressPct}%` }}
+                    />
+                </div>
+                <span className={styles.time}>{formatTime(duration)}</span>
             </div>
         </div>
     );

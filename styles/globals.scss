@@ -12,6 +12,8 @@ html {
     font-size: 16px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    // Use dvh for proper mobile viewport height (accounts for browser chrome)
+    height: 100%;
 }
 
 body {
@@ -19,7 +21,14 @@ body {
     background: $bg-primary;
     color: $text-primary;
     min-height: 100vh;
+    min-height: 100dvh;
     overflow-x: hidden;
+    // Prevent iOS from zooming on input focus
+    -webkit-text-size-adjust: 100%;
+    // Remove tap highlight on mobile
+    -webkit-tap-highlight-color: transparent;
+    // Improve text rendering on mobile
+    text-rendering: optimizeLegibility;
 }
 
 a {

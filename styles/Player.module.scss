@@ -12,14 +12,20 @@
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.05),
         0 -20px 60px rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    // 3-column × 2-row grid:
+    //   col 1 = track info (spans both rows)
+    //   col 2 row 1 = playback buttons, col 2 row 2 = progress bar
+    //   col 3 = volume (spans both rows)
+    display: grid;
+    grid-template-columns: minmax(180px, 260px) 1fr minmax(130px, auto);
+    grid-template-rows: auto auto;
+    align-content: center;
+    column-gap: 20px;
+    row-gap: 4px;
     padding: 0 28px;
-    // Reserve space for iOS home indicator
     padding-bottom: env(safe-area-inset-bottom);
-    gap: 20px;
-    overflow: hidden;
+    // overflow:visible keeps the mobile volume overlay (position:fixed) unclipped
+    overflow: visible;
 
     // Subtle accent glow seam at bottom centre
     &::after {
@@ -28,7 +34,7 @@
         bottom: 0;
         left: 50%;
         transform: translateX(-50%);
-        width: 320px;
+        width: min(320px, 90%);
         height: 1px;
         background: linear-gradient(
             90deg,
@@ -48,7 +54,10 @@
 
 // ── Compact empty state ───────────────────────────────────────
 .playerEmpty {
+    // Override grid with a simple centred flex for the empty state
+    display: flex;
     justify-content: center;
+    align-items: center;
     gap: 10px;
     height: 44px;
     background: rgba(10, 10, 18, 0.6);
@@ -68,11 +77,15 @@
 
 // ── Track Info ────────────────────────────────────────────────
 .trackInfo {
+    grid-column: 1;
+    grid-row: 1 / 3; // span both rows so art+name stay vertically centred
+    align-self: center;
     display: flex;
     align-items: center;
     gap: 14px;
     min-width: 180px;
     max-width: 260px;
+    min-width: 0;
 }
 
 .albumArt {
@@ -125,14 +138,13 @@
     @include truncate;
 }
 
-// ── Controls ──────────────────────────────────────────────────
+// ── Controls (buttons only — progress row is a separate grid item) ───────────
 .controls {
+    grid-column: 2;
+    grid-row: 1;
     display: flex;
-    flex-direction: column;
+    justify-content: center;
     align-items: center;
-    gap: 6px;
-    flex: 1;
-    max-width: 580px;
 }
 
 .buttons {
@@ -221,6 +233,8 @@
 
 // ── Progress Bar ──────────────────────────────────────────────
 .progressRow {
+    grid-column: 2;
+    grid-row: 2;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -311,6 +325,10 @@
 
 // ── Volume ────────────────────────────────────────────────────
 .volume {
+    grid-column: 3;
+    grid-row: 1 / 3; // span both rows, align-self centres it
+    align-self: center;
+    justify-self: end;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -393,6 +411,9 @@
 }
 
 // ── Mobile vertical volume overlay ───────────────────────────
+// On desktop: absolutely positioned above the volume button.
+// On mobile: fixed so it escapes the player's stacking context
+//   (backdrop-filter on .player would otherwise contain it).
 .volumeOverlay {
     position: absolute;
     bottom: calc(100% + 12px);
@@ -407,8 +428,11 @@
     border: 1px solid $bg-elevated;
     border-radius: $radius-lg;
     padding: 14px 12px;
-    z-index: 200;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    // Must sit above playerSlot (z-index 120) and tabBar (z-index 115)
+    z-index: 250;
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.6),
+        0 0 0 1px rgba(124, 92, 255, 0.12);
 }
 
 .volumeOverlaySlider {
@@ -433,31 +457,100 @@
 @media (max-width: 900px) {
     .player {
         padding: 0 20px;
+        column-gap: 16px;
     }
 
     .trackInfo {
-        max-width: 200px;
+        max-width: 220px;
     }
 }
 
+// ── Mobile: 2-row layout matching the mini-player design ─────
+//
+//  Row 1:  [album + title/artist (flex)] [⏮ ⏸/▶ ⏭] [🔊]
+//  Row 2:  [1:22 ───── progress bar ─────── 2:04]  (full width)
+//
 @media (max-width: 768px) {
     .player {
-        padding: 0 14px;
-        padding-bottom: env(safe-area-inset-bottom);
-        gap: 12px;
+        // Collapse to 3 auto columns: info grows, buttons+volume shrink-wrap
+        grid-template-columns: 1fr auto auto;
+        grid-template-rows: auto auto;
+        column-gap: 6px;
+        row-gap: 6px;
+        // Taller than desktop to comfortably fit 2 rows
+        height: auto;
+        min-height: $player-height-mobile;
+        padding: 8px 12px;
+        padding-bottom: calc(8px + env(safe-area-inset-bottom));
     }
 
+    // ── Row 1 ──
     .trackInfo {
-        min-width: 100px;
-        max-width: 140px;
+        grid-column: 1;
+        grid-row: 1; // Single row — no longer spans
+        align-self: center;
+        min-width: 0;
+        max-width: none; // Fill all available space
+        gap: 10px;
     }
 
+    .controls {
+        grid-column: 2;
+        grid-row: 1;
+        align-self: center;
+    }
+
+    .volume {
+        grid-column: 3;
+        grid-row: 1; // Single row on mobile
+        align-self: center;
+        min-width: auto;
+        justify-self: end;
+    }
+
+    // ── Row 2 — full-width progress ──
+    .progressRow {
+        grid-column: 1 / -1; // Span all 3 columns edge-to-edge
+        grid-row: 2;
+        gap: 8px;
+    }
+
+    // ── Track art + text ──
     .albumArt {
-        width: 40px;
-        height: 40px;
+        width: 42px;
+        height: 42px;
+        border-radius: $radius-sm;
     }
 
-    // Hide desktop volume slider + icon row; show the toggle button instead
+    .trackName {
+        font-size: 0.8125rem;
+    }
+    .artistName {
+        font-size: 0.6875rem;
+    }
+
+    // ── Control buttons ──
+    .buttons {
+        gap: 2px;
+    }
+    .controlBtn {
+        width: 38px;
+        height: 38px;
+    }
+    .playBtn {
+        width: 44px;
+        height: 44px;
+        margin: 0 2px;
+    }
+
+    // ── Timestamps ──
+    .time {
+        font-size: 0.625rem;
+        min-width: 28px;
+    }
+
+    // ── Volume ──
+    // Hide desktop slider + icon; show the icon-button toggle
     .volume > svg,
     .volumeSlider {
         display: none;
@@ -465,6 +558,19 @@
 
     .volumeBtn {
         display: flex;
+        width: 44px; // 44×44 WCAG minimum touch target
+        height: 44px;
+    }
+
+    // Volume overlay: fixed so it escapes the backdrop-filter stacking context
+    .volumeOverlay {
+        position: fixed;
+        bottom: calc(
+            #{$player-height-mobile} + #{$tab-bar-height} +
+                env(safe-area-inset-bottom) + 10px
+        );
+        right: 12px;
+        z-index: 250;
     }
 }
 
@@ -472,16 +578,36 @@
 @media (pointer: coarse) {
     .progressFill::after {
         opacity: 1;
-        width: 14px;
-        height: 14px;
-        right: -7px;
+        width: 16px;
+        height: 16px;
+        right: -8px;
     }
 
-    .progressBar::before {
-        height: 4px;
+    .progressBar {
+        // Taller hit area for fat fingers
+        height: 28px;
+
+        &::before {
+            height: 4px;
+        }
     }
 
     .progressFill {
         height: 4px;
+    }
+}
+
+// ── Very small phones (< 380px) — hide timestamps to reclaim space ──
+@media (max-width: 380px) {
+    .time {
+        display: none;
+    }
+
+    .trackInfo {
+        max-width: 110px;
+    }
+
+    .controls {
+        gap: 3px;
     }
 }
