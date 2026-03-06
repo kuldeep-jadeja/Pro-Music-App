@@ -99,3 +99,118 @@
         right: 0;
     }
 }
+
+// ── Floating import progress chip ────────────────────────────
+.importChip {
+    position: fixed;
+    bottom: calc(#{$player-height} + 12px);
+    right: 16px;
+    z-index: 125;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: $bg-surface;
+    border: 1px solid $bg-elevated;
+    border-radius: $radius-lg;
+    padding: 8px 10px 8px 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+    min-width: 220px;
+    max-width: 280px;
+    animation: chipSlideIn 200ms ease;
+
+    @media (min-width: $breakpoint-panel) {
+        right: calc(#{$panel-width} + 16px);
+    }
+
+    @media (max-width: $breakpoint-mobile) {
+        bottom: calc(
+            #{$player-height-mobile} + #{$tab-bar-height} +
+                env(safe-area-inset-bottom) + 8px
+        );
+        right: 12px;
+        min-width: 180px;
+    }
+}
+
+.importChipDone {
+    border-color: rgba($success, 0.4);
+    background: mix(#000, $success, 85%);
+}
+
+.importChipCover {
+    width: 32px;
+    height: 32px;
+    border-radius: $radius-sm;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.importChipBody {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.importChipName {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: $text-primary;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.importChipTrack {
+    height: 3px;
+    border-radius: $radius-full;
+    background: $bg-elevated;
+    overflow: hidden;
+}
+
+.importChipFill {
+    height: 100%;
+    border-radius: $radius-full;
+    background: $accent;
+    transition: width 600ms ease;
+}
+
+.importChipPct {
+    font-size: 0.7rem;
+    color: $text-muted;
+}
+
+.importChipClose {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: $radius-full;
+    background: transparent;
+    color: $text-muted;
+    font-size: 1rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+        color $transition-fast,
+        background $transition-fast;
+    padding: 0;
+
+    &:hover {
+        color: $text-primary;
+        background: $bg-elevated;
+    }
+}
+
+@keyframes chipSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

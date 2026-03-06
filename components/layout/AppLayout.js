@@ -18,11 +18,20 @@ export default function AppLayout({ children }) {
         currentTrack,
         currentIndex,
         handleTrackChange,
+        activeImport,
+        dismissImport,
     } = useAppContext();
 
     const router = useRouter();
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [panelOpen, setPanelOpen] = useState(false);
+
+    // Show the floating import chip on every page except home (where ImportForm
+    // already shows the matching card inline).
+    const showImportChip =
+        activeImport &&
+        (activeImport.phase === 'matching' || activeImport.phase === 'complete') &&
+        router.pathname !== '/';
 
     return (
         <div className={styles.shell}>
@@ -85,6 +94,44 @@ export default function AppLayout({ children }) {
                 isOpen={panelOpen}
                 onClose={() => setPanelOpen(false)}
             />
+
+            {/* Floating import progress chip — visible on non-home pages */}
+            {showImportChip && (
+                <div className={`${styles.importChip} ${activeImport.phase === 'complete' ? styles.importChipDone : ''}`}>
+                    {activeImport.coverImage && (
+                        <img
+                            src={activeImport.coverImage}
+                            alt=""
+                            className={styles.importChipCover}
+                            width={32}
+                            height={32}
+                        />
+                    )}
+                    <div className={styles.importChipBody}>
+                        <span className={styles.importChipName}>
+                            {activeImport.phase === 'complete' ? '✓ Ready!' : activeImport.name || 'Importing…'}
+                        </span>
+                        {activeImport.phase === 'matching' && (
+                            <>
+                                <div className={styles.importChipTrack}>
+                                    <div
+                                        className={styles.importChipFill}
+                                        style={{ width: `${activeImport.progress}%` }}
+                                    />
+                                </div>
+                                <span className={styles.importChipPct}>{activeImport.progress}%</span>
+                            </>
+                        )}
+                    </div>
+                    <button
+                        className={styles.importChipClose}
+                        onClick={dismissImport}
+                        aria-label="Dismiss import progress"
+                    >
+                        ×
+                    </button>
+                </div>
+            )}
         </div>
     );
 }
