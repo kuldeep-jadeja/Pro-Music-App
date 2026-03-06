@@ -4,6 +4,7 @@
 .shell {
     display: flex;
     height: 100vh;
+    height: 100dvh; // Dynamic viewport height — accounts for mobile browser chrome
     background: $bg-primary;
     overflow: hidden;
 }
@@ -44,7 +45,7 @@
     @media (max-width: $breakpoint-mobile) {
         padding: 20px 16px
             calc(
-                #{$player-height} + #{$tab-bar-height} +
+                #{$player-height-mobile} + #{$tab-bar-height} +
                     env(safe-area-inset-bottom) + 20px
             );
     }

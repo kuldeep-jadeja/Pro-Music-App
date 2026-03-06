@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#7c5cff" />
+    <title>Demus – Offline</title>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0b0b0f;
+            color: #fff;
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            padding: 24px;
+            text-align: center;
+        }
+
+        .icon {
+            width: 80px;
+            height: 80px;
+            background: rgba(124, 92, 255, 0.15);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .icon svg {
+            color: #7c5cff;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        p {
+            color: #a0a0b0;
+            font-size: 0.9375rem;
+            max-width: 280px;
+            line-height: 1.5;
+        }
+
+        button {
+            margin-top: 8px;
+            padding: 12px 28px;
+            background: #7c5cff;
+            color: #fff;
+            border: none;
+            border-radius: 9999px;
+            font-size: 0.9375rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        button:active {
+            opacity: 0.85;
+            transform: scale(0.97);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="icon">
+        <svg viewBox="0 0 24 24" width="40" height="40" fill="currentColor" aria-hidden="true">
+            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+        </svg>
+    </div>
+    <h1>You're Offline</h1>
+    <p>Check your connection and try again. Previously visited pages may still be available.</p>
+    <button onclick="location.reload()">Try Again</button>
+</body>
+
+</html>

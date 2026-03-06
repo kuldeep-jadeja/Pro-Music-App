@@ -7,6 +7,8 @@
     left: $sidebar-width;
     right: 0;
     height: $navbar-height;
+    // Account for iOS status bar / Dynamic Island notch
+    padding-top: env(safe-area-inset-top);
     background: rgba($bg-primary, 0.82);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
@@ -14,13 +16,15 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 28px;
+    padding-left: 28px;
+    padding-right: 28px;
     gap: 20px;
     z-index: 100;
 
     @media (max-width: $breakpoint-mobile) {
         left: 0;
-        padding: 0 16px;
+        padding-left: 16px;
+        padding-right: 16px;
     }
 }
 
