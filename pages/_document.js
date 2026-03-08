@@ -33,6 +33,8 @@ export default function Document() {
         {/* Favicon */}
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" href="/icons/icon-192.png" type="image/png" />
+
+        <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet"></link>
       </Head>
       <body>
         <Main />

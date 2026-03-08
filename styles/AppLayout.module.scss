@@ -1,4 +1,5 @@
 @use "variables" as *;
+@use "sass:color";
 
 // ── Shell ─────────────────────────────────────────────────────
 .shell {
@@ -134,7 +135,7 @@
 
 .importChipDone {
     border-color: rgba($success, 0.4);
-    background: mix(#000, $success, 85%);
+    background: color.mix(#000, $success, 85%);
 }
 
 .importChipCover {
