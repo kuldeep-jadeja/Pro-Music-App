@@ -1,0 +1,217 @@
+@use "variables" as *;
+@use "sass:color";
+
+// ── Shell ─────────────────────────────────────────────────────
+.shell {
+    display: flex;
+    height: 100vh;
+    height: 100dvh; // Dynamic viewport height — accounts for mobile browser chrome
+    background: $bg-primary;
+    overflow: hidden;
+}
+
+// ── Body (everything right of sidebar) ───────────────────────
+.body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    margin-left: $sidebar-width;
+    height: 100vh;
+    overflow: hidden;
+    transition: margin-right $transition-normal;
+
+    // Panel is always rendered (and visible) on wide screens,
+    // so always compensate with margin-right regardless of play state.
+    @media (min-width: $breakpoint-panel) {
+        margin-right: $panel-width;
+    }
+
+    @media (max-width: $breakpoint-mobile) {
+        margin-left: 0;
+    }
+}
+
+// Kept for backwards compatibility — no-op at panel breakpoint now
+.bodyWithPanel {
+}
+
+// ── Scrollable content beneath navbar ────────────────────────
+.content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px 32px calc(#{$player-height} + 28px);
+    margin-top: $navbar-height;
+
+    @media (max-width: $breakpoint-mobile) {
+        padding: 20px 16px
+            calc(
+                #{$player-height-mobile} + #{$tab-bar-height} +
+                    env(safe-area-inset-bottom) + 20px
+            );
+    }
+
+    // Custom scrollbar to match dark theme
+    scrollbar-width: thin;
+    scrollbar-color: $bg-elevated transparent;
+
+    &::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    &::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        background: $bg-elevated;
+        border-radius: $radius-full;
+    }
+}
+
+// ── Max-width content container ─────────────────────────────
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+// ── Backdrop overlay (mobile sidebar) ────────────────────────
+.backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 109;
+}
+
+// ── Player slot (fixed bottom, full width) ───────────────────
+.playerSlot {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 120;
+
+    @media (min-width: $breakpoint-panel) {
+        right: $panel-width;
+    }
+
+    @media (max-width: $breakpoint-mobile) {
+        bottom: calc(#{$tab-bar-height} + env(safe-area-inset-bottom));
+        right: 0;
+    }
+}
+
+// ── Floating import progress chip ────────────────────────────
+.importChip {
+    position: fixed;
+    bottom: calc(#{$player-height} + 12px);
+    right: 16px;
+    z-index: 125;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: $bg-surface;
+    border: 1px solid $bg-elevated;
+    border-radius: $radius-lg;
+    padding: 8px 10px 8px 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+    min-width: 220px;
+    max-width: 280px;
+    animation: chipSlideIn 200ms ease;
+
+    @media (min-width: $breakpoint-panel) {
+        right: calc(#{$panel-width} + 16px);
+    }
+
+    @media (max-width: $breakpoint-mobile) {
+        bottom: calc(
+            #{$player-height-mobile} + #{$tab-bar-height} +
+                env(safe-area-inset-bottom) + 8px
+        );
+        right: 12px;
+        min-width: 180px;
+    }
+}
+
+.importChipDone {
+    border-color: rgba($success, 0.4);
+    background: color.mix(#000, $success, 85%);
+}
+
+.importChipCover {
+    width: 32px;
+    height: 32px;
+    border-radius: $radius-sm;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.importChipBody {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.importChipName {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: $text-primary;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.importChipTrack {
+    height: 3px;
+    border-radius: $radius-full;
+    background: $bg-elevated;
+    overflow: hidden;
+}
+
+.importChipFill {
+    height: 100%;
+    border-radius: $radius-full;
+    background: $accent;
+    transition: width 600ms ease;
+}
+
+.importChipPct {
+    font-size: 0.7rem;
+    color: $text-muted;
+}
+
+.importChipClose {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: $radius-full;
+    background: transparent;
+    color: $text-muted;
+    font-size: 1rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+        color $transition-fast,
+        background $transition-fast;
+    padding: 0;
+
+    &:hover {
+        color: $text-primary;
+        background: $bg-elevated;
+    }
+}
+
+@keyframes chipSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

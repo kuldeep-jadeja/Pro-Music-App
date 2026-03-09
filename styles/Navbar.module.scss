@@ -1,39 +1,122 @@
 @use "variables" as *;
 
+// ── Top bar ───────────────────────────────────────────────────
 .navbar {
     position: fixed;
     top: 0;
-    left: 0;
+    left: $sidebar-width;
     right: 0;
     height: $navbar-height;
-    background: rgba($bg-primary, 0.85);
-    backdrop-filter: blur(12px);
+    // Account for iOS status bar / Dynamic Island notch
+    padding-top: env(safe-area-inset-top);
+    background: rgba($bg-primary, 0.82);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     border-bottom: 1px solid $bg-elevated;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 24px;
-    z-index: 100;
-}
-
-.logo {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: $accent;
-}
-
-.brand {
-    font-size: 1.25rem;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-    color: $text-primary;
-}
-
-.links {
-    display: flex;
-    align-items: center;
+    padding-left: 28px;
+    padding-right: 28px;
     gap: 20px;
+    z-index: 100;
+
+    @media (max-width: $breakpoint-mobile) {
+        left: 0;
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+}
+
+// ── Hamburger (mobile only) ───────────────────────────────────
+.hamburger {
+    display: none;
+
+    @media (max-width: $breakpoint-mobile) {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        flex-shrink: 0;
+        color: $text-secondary;
+        transition: color $transition-fast;
+
+        &:hover {
+            color: $text-primary;
+        }
+    }
+}
+
+// ── Search ────────────────────────────────────────────────────
+.searchWrap {
+    position: relative;
+    flex: 1;
+    max-width: 480px;
+
+    @media (max-width: $breakpoint-mobile) {
+        max-width: none;
+    }
+}
+
+// Dimmed state when search is not available (guests / not-yet-implemented)
+.searchWrapDisabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+
+    .searchIcon {
+        pointer-events: none;
+    }
+}
+
+.searchIcon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: $text-muted;
+    display: flex;
+    pointer-events: none;
+}
+
+.searchInput {
+    width: 100%;
+    height: 40px;
+    background: $bg-secondary;
+    border: 1px solid $bg-elevated;
+    border-radius: $radius-full;
+    color: $text-primary;
+    font-family: $font-sans;
+    font-size: 0.875rem;
+    padding: 0 16px 0 42px;
+    outline: none;
+    transition:
+        border-color $transition-fast,
+        box-shadow $transition-fast;
+
+    &::placeholder {
+        color: $text-muted;
+    }
+
+    &:focus {
+        border-color: rgba($accent, 0.5);
+        box-shadow: 0 0 0 3px rgba($accent, 0.1);
+    }
+
+    // Remove browser search decorations
+    &::-webkit-search-decoration,
+    &::-webkit-search-cancel-button {
+        -webkit-appearance: none;
+    }
+}
+
+// ── User controls ─────────────────────────────────────────────
+.controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
 }
 
 .link {
@@ -50,17 +133,17 @@
 .authBtn {
     font-size: 0.8125rem;
     font-weight: 600;
-    padding: 8px 16px;
+    padding: 8px 18px;
     background: $accent;
-    color: #000;
+    color: #fff;
     border-radius: $radius-full;
     transition:
         background $transition-fast,
-        transform $transition-fast;
+        box-shadow $transition-fast;
 
     &:hover {
         background: $accent-hover;
-        transform: scale(1.02);
+        box-shadow: $accent-glow;
     }
 }
 
@@ -71,22 +154,28 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+
+    @media (max-width: $breakpoint-mobile) {
+        display: none;
+    }
 }
 
 .logoutBtn {
     font-size: 0.8125rem;
     font-weight: 600;
-    padding: 8px 16px;
-    background: $bg-surface;
+    padding: 7px 16px;
+    background: transparent;
     color: $text-secondary;
     border-radius: $radius-full;
     border: 1px solid $bg-elevated;
     transition:
         background $transition-fast,
-        color $transition-fast;
+        color $transition-fast,
+        border-color $transition-fast;
 
     &:hover {
-        background: $bg-surface-hover;
+        background: rgba(255, 255, 255, 0.06);
         color: $text-primary;
+        border-color: rgba(255, 255, 255, 0.14);
     }
 }

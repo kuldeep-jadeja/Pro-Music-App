@@ -1,96 +1,169 @@
 @use "variables" as *;
 
 .card {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px;
-    border-radius: $radius-md;
+    background: $bg-secondary;
+    border-radius: $radius-xl;
+    overflow: hidden;
     cursor: pointer;
-    transition: background $transition-fast;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    @include hover-lift;
 
-    &:hover {
-        background: $bg-surface-hover;
+    &:hover .playOverlay {
+        opacity: 1;
     }
 }
 
-.imageWrapper {
+.artWrap {
     position: relative;
-    width: 48px;
-    height: 48px;
-    flex-shrink: 0;
-    border-radius: $radius-sm;
+    width: 100%;
+    aspect-ratio: 1 / 1;
     overflow: hidden;
+    background: $bg-surface;
 }
 
-.coverImage {
+.cover {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    display: block;
 }
 
 .placeholder {
     width: 100%;
     height: 100%;
-    background: $bg-elevated;
     display: flex;
     align-items: center;
     justify-content: center;
+    background: linear-gradient(135deg, $bg-surface, #2a1f60);
     color: $text-muted;
 
     svg {
-        width: 24px;
-        height: 24px;
+        width: 40px;
+        height: 40px;
+        opacity: 0.5;
     }
 }
 
-.overlay {
+.playOverlay {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
     display: flex;
     align-items: center;
     justify-content: center;
+    background: rgba(0, 0, 0, 0.45);
     opacity: 0;
-    transition: opacity $transition-fast;
-    color: $text-primary;
-
-    .card:hover & {
-        opacity: 1;
-    }
+    transition: opacity $transition-normal;
 
     svg {
-        width: 20px;
-        height: 20px;
+        width: 48px;
+        height: 48px;
+        color: white;
+        filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.6));
     }
 }
 
 .info {
-    min-width: 0;
-    flex: 1;
+    padding: 12px 14px 14px;
 }
 
 .name {
     font-size: 0.875rem;
     font-weight: 600;
     color: $text-primary;
+    margin: 0 0 3px;
     @include truncate;
 }
 
 .meta {
     font-size: 0.75rem;
     color: $text-muted;
+    margin: 0 0 8px;
 }
 
-.status {
+.footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+// Match progress strip — overlaid at the bottom of the art area
+.matchProgressTrack {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 2;
+}
+
+.matchProgressFill {
+    height: 100%;
+    background: linear-gradient(90deg, $accent 0%, $accent-secondary 100%);
+    border-radius: 0 $radius-full $radius-full 0;
+    transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+    min-width: 4px;
+}
+
+// Animated dot inside the matching badge
+.matchingDot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    margin-right: 4px;
+    animation: dotPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes dotPulse {
+    0%,
+    100% {
+        opacity: 0.4;
+        transform: scale(0.75);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.1);
+    }
+}
+
+.badge {
+    display: inline-flex;
+    align-items: center;
     font-size: 0.6875rem;
-    font-weight: 500;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: $radius-full;
+    background: $bg-surface;
+    color: $text-muted;
+}
+
+.badge_matching {
+    color: #3b82f6;
+    background: rgba(59, 130, 246, 0.12);
+}
+
+.badge_ready {
+    color: $success;
+    background: rgba(46, 204, 113, 0.12);
+}
+
+.badge_paused {
+    color: $warning;
+    background: $warning-dim;
+}
+
+.badge_error {
+    color: $danger;
+    background: rgba(255, 79, 79, 0.12);
 }
 
 .resumeBtn {
-    display: inline-block;
-    margin-top: 4px;
-    padding: 2px 10px;
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
     font-size: 0.6875rem;
     font-weight: 600;
     color: $bg-primary;

@@ -1,38 +1,72 @@
 @use "variables" as *;
 
+// Column grid definition — single source of truth for header + row alignment
+// 48px | song+art | artist | album | 72px duration
+$cols: 48px 1.8fr 1fr 1fr 72px;
+$cols-no-album: 48px 2fr 1.2fr 72px;
+$cols-compact: 48px 1fr 72px;
+
 .container {
     margin-top: 8px;
 }
 
-.header {
-    display: flex;
+// ── Shared grid rule applied to both header and rows ─────────
+.header,
+.track {
+    display: grid;
+    grid-template-columns: $cols;
     align-items: center;
-    padding: 0 16px 8px;
-    border-bottom: 1px solid $bg-elevated;
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: $text-muted;
+    padding-left: 16px;
+    padding-right: 16px;
+
+    @media (max-width: 900px) {
+        grid-template-columns: $cols-no-album;
+    }
+
+    @media (max-width: 700px) {
+        grid-template-columns: $cols-compact;
+    }
 }
 
+// ── Header ───────────────────────────────────────────────────
+.header {
+    padding-bottom: 10px;
+    border-bottom: 1px solid $bg-elevated;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: $text-muted;
+    user-select: none;
+}
+
+// ── Columns ──────────────────────────────────────────────────
 .colNum {
-    width: 40px;
+    position: relative;
     text-align: center;
-    flex-shrink: 0;
 }
 
 .colTitle {
-    flex: 1;
-    min-width: 0;
     display: flex;
     align-items: center;
     gap: 12px;
+    min-width: 0;
+    padding-right: 16px;
+}
+
+.colArtist {
+    min-width: 0;
+    padding-right: 16px;
+    @include truncate;
+
+    @media (max-width: 700px) {
+        display: none;
+    }
 }
 
 .colAlbum {
-    width: 200px;
-    flex-shrink: 0;
+    min-width: 0;
+    padding-right: 16px;
     @include truncate;
 
     @media (max-width: 900px) {
@@ -41,27 +75,53 @@
 }
 
 .colDuration {
-    width: 70px;
-    flex-shrink: 0;
     text-align: right;
+    white-space: nowrap;
 }
 
+// ── Track list ───────────────────────────────────────────────
 .list {
     display: flex;
     flex-direction: column;
+    list-style: none;
+    padding: 4px 0 0;
+    margin: 0;
 }
 
+// ── Track row ────────────────────────────────────────────────
 .track {
-    display: flex;
-    align-items: center;
-    padding: 8px 16px;
+    min-height: 56px;
     border-radius: $radius-md;
     cursor: pointer;
-    transition: background $transition-fast;
     font-size: 0.875rem;
+    transition: background $transition-fast;
+
+    // Scoped column colors — only inside data rows, not the header
+    .colArtist,
+    .colAlbum {
+        color: $text-secondary;
+    }
+
+    .colDuration {
+        color: $text-muted;
+        font-size: 0.8125rem;
+        font-variant-numeric: tabular-nums;
+    }
 
     &:hover {
         background: $bg-surface-hover;
+
+        .trackNum {
+            opacity: 0;
+        }
+
+        .hoverPlay {
+            opacity: 1;
+        }
+
+        .trackName {
+            color: $text-primary;
+        }
     }
 
     &.active {
@@ -70,38 +130,88 @@
         .trackName {
             color: $accent;
         }
+
+        .colNum {
+            color: $accent;
+        }
+
+        .colArtist {
+            color: rgba(124, 92, 255, 0.65);
+        }
     }
 
     &.unavailable {
-        opacity: 0.45;
+        opacity: 0.3;
         cursor: not-allowed;
+
+        &:hover {
+            background: transparent;
+
+            .trackNum {
+                opacity: 1;
+            }
+
+            .hoverPlay {
+                opacity: 0;
+            }
+        }
+    }
+
+    // Matching in progress — softer fade + pulse, not fully blocked
+    &.trackMatching {
+        opacity: 0.55;
+        cursor: not-allowed;
+
+        &:hover {
+            background: transparent;
+
+            .trackNum {
+                opacity: 1;
+            }
+        }
     }
 }
 
 .albumArt {
     width: 40px;
     height: 40px;
+    flex-shrink: 0;
     border-radius: $radius-sm;
     object-fit: cover;
-    flex-shrink: 0;
+    background: $bg-surface;
 }
 
 .trackInfo {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    gap: 1px;
 }
 
 .trackName {
     font-weight: 500;
     color: $text-primary;
     @include truncate;
+    transition: color $transition-fast;
 }
 
-.artistName {
-    font-size: 0.8125rem;
-    color: $text-secondary;
-    @include truncate;
+.trackNum {
+    color: $text-muted;
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+    transition: opacity $transition-fast;
+}
+
+.hoverPlay {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 16px;
+    height: 16px;
+    opacity: 0;
+    color: $text-primary;
+    transition: opacity $transition-fast;
+    pointer-events: none;
 }
 
 .badge {
@@ -112,46 +222,91 @@
     border-radius: $radius-full;
 }
 
+// Distinct badge for definitively unmatched tracks
+.badgeUnavailable {
+    font-size: 0.6875rem;
+    color: rgba(255, 79, 79, 0.6);
+    background: rgba(255, 79, 79, 0.08);
+    padding: 2px 8px;
+    border-radius: $radius-full;
+}
+
+// Three-dot pulsing indicator for in-progress matching
+.matchingIndicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.matchingDot {
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #3b82f6;
+    animation: matchingPulse 1.2s ease-in-out infinite;
+
+    &:nth-child(2) {
+        animation-delay: 0.2s;
+    }
+    &:nth-child(3) {
+        animation-delay: 0.4s;
+    }
+}
+
+@keyframes matchingPulse {
+    0%,
+    100% {
+        opacity: 0.3;
+        transform: scale(0.8);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.2);
+    }
+}
+
 .empty {
     color: $text-muted;
     font-size: 0.875rem;
     text-align: center;
-    padding: 40px 0;
+    padding: 48px 0;
 }
 
-// ── Playing animation ────────────────────────────────────────
+// ── Currently playing animation ───────────────────────────────
 .playingIcon {
     display: flex;
     align-items: flex-end;
+    justify-content: center;
     gap: 2px;
     height: 14px;
 
     span {
         width: 3px;
         background: $accent;
-        border-radius: 1px;
-        animation: playBars 0.8s ease-in-out infinite alternate;
+        border-radius: 2px;
+        animation: playBars 0.9s ease-in-out infinite alternate;
 
         &:nth-child(1) {
             height: 6px;
             animation-delay: 0s;
         }
         &:nth-child(2) {
-            height: 10px;
-            animation-delay: 0.2s;
+            height: 12px;
+            animation-delay: 0.15s;
         }
         &:nth-child(3) {
             height: 4px;
-            animation-delay: 0.4s;
+            animation-delay: 0.3s;
         }
     }
 }
 
 @keyframes playBars {
-    0% {
+    from {
         height: 4px;
     }
-    100% {
+    to {
         height: 14px;
     }
 }

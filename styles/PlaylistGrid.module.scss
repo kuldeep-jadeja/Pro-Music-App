@@ -1,0 +1,49 @@
+@use "variables" as *;
+
+.section {
+    margin-bottom: 40px;
+}
+
+.title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: $text-primary;
+    margin: 0 0 20px;
+    letter-spacing: -0.01em;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 20px;
+}
+
+.empty {
+    color: $text-muted;
+    font-size: 0.875rem;
+    padding: 24px 0;
+}
+
+// ── Skeleton loading cards ────────────────────────────────────
+@keyframes shimmer {
+    0% {
+        background-position: -400px 0;
+    }
+    100% {
+        background-position: 400px 0;
+    }
+}
+
+.skeletonCard {
+    border-radius: $radius-xl;
+    // Mimic PlaylistCard aspect ratio: square art + text strip below
+    aspect-ratio: 1 / 1.25;
+    background: linear-gradient(
+        90deg,
+        $bg-surface 25%,
+        $bg-surface-hover 50%,
+        $bg-surface 75%
+    );
+    background-size: 800px 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+}

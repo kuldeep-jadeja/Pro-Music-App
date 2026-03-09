@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import Link from 'next/link';
 import styles from '@/styles/Player.module.scss';
 
 /**
@@ -16,12 +17,14 @@ export default function Player({
     playlist,
     currentIndex,
     onTrackChange,
+    playlistId,
 }) {
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [volume, setVolume] = useState(80);
     const [isReady, setIsReady] = useState(false);
+    const [volumeOpen, setVolumeOpen] = useState(false);
     const playerRef = useRef(null);
     const intervalRef = useRef(null);
     const containerRef = useRef(null);
@@ -67,22 +70,37 @@ export default function Player({
             }
 
             playerRef.current = new window.YT.Player('yt-player', {
-                height: '0',
-                width: '0',
+                // iOS Safari requires non-zero dimensions on the iframe
+                // (display:none / 0×0 silently blocks audio on WebKit).
+                height: '1',
+                width: '1',
                 videoId: track.youtubeVideoId,
                 playerVars: {
                     autoplay: 1,
+                    playsinline: 1, // Required for inline playback on iOS
                     controls: 0,
                     disablekb: 1,
                     fs: 0,
                     modestbranding: 1,
                     rel: 0,
+                    origin: typeof window !== 'undefined' ? window.location.origin : '',
                 },
                 events: {
                     onReady: (event) => {
                         setIsReady(true);
                         event.target.setVolume(volume);
-                        event.target.playVideo();
+                        // iOS Safari blocks playVideo() calls that happen
+                        // outside a user-gesture callstack (onReady fires
+                        // asynchronously and is NOT in a gesture context).
+                        // Calling it here on iOS silently fails, leaving the
+                        // player in an ambiguous state that causes the first
+                        // tap on the play button to appear to do nothing.
+                        // On desktop (Chrome / Firefox / desktop Safari) the
+                        // call works fine — autoplay is permitted.
+                        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                        if (!isIOS) {
+                            event.target.playVideo();
+                        }
                     },
                     onStateChange: (event) => {
                         const state = event.data;
@@ -145,9 +163,20 @@ export default function Player({
 
     const togglePlay = () => {
         if (!playerRef.current) return;
-        if (isPlaying) {
-            playerRef.current.pauseVideo();
-        } else {
+        try {
+            // Read state DIRECTLY from the player instead of relying on the
+            // React `isPlaying` state variable.  On iOS the player can be in
+            // UNSTARTED (-1) or PAUSED (2) before the user's first gesture,
+            // and the React state may not yet reflect those transitions.
+            // getPlayerState() always returns the live value.
+            const state = playerRef.current.getPlayerState();
+            if (state === 1 /* YT.PlayerState.PLAYING */) {
+                playerRef.current.pauseVideo();
+            } else {
+                playerRef.current.playVideo();
+            }
+        } catch {
+            // Fallback if getPlayerState throws (e.g. iframe not ready)
             playerRef.current.playVideo();
         }
     };
@@ -199,10 +228,11 @@ export default function Player({
 
     if (!track) {
         return (
-            <div className={styles.player}>
-                <div className={styles.empty}>
-                    Select a track to start listening
-                </div>
+            <div className={`${styles.player} ${styles.playerEmpty}`}>
+                <svg className={styles.emptyIcon} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" width="20" height="20">
+                    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+                </svg>
+                <span className={styles.empty}>Select a track to start listening</span>
             </div>
         );
     }
@@ -211,18 +241,43 @@ export default function Player({
 
     return (
         <div className={styles.player} ref={containerRef}>
-            {/* Hidden YouTube player */}
-            <div id="yt-player" style={{ display: 'none' }} />
+            {/* YouTube player container.
+                 MUST NOT use display:none or visibility:hidden on iOS Safari —
+                 WebKit silently blocks audio playback from invisible elements.
+                 1×1px + opacity:0 keeps it accessible to the media engine
+                 while remaining invisible to the user. */}
+            <div id="yt-player" style={{
+                position: 'fixed',
+                width: '1px',
+                height: '1px',
+                opacity: 0,
+                top: 0,
+                left: 0,
+                pointerEvents: 'none',
+                zIndex: -1,
+            }} />
 
             {/* Track Info */}
             <div className={styles.trackInfo}>
-                <img
-                    className={styles.albumArt}
-                    src={track.albumImage || '/placeholder.png'}
-                    alt={track.album || 'Album'}
-                    width={56}
-                    height={56}
-                />
+                {playlistId ? (
+                    <Link href={`/playlist/${playlistId}`} className={styles.albumArtLink} title="Go to playlist">
+                        <img
+                            className={styles.albumArt}
+                            src={track.albumImage || '/placeholder.png'}
+                            alt={track.album || 'Album'}
+                            width={56}
+                            height={56}
+                        />
+                    </Link>
+                ) : (
+                    <img
+                        className={styles.albumArt}
+                        src={track.albumImage || '/placeholder.png'}
+                        alt={track.album || 'Album'}
+                        width={56}
+                        height={56}
+                    />
+                )}
                 <div className={styles.meta}>
                     <span className={styles.trackName}>{track.name}</span>
                     <span className={styles.artistName}>
@@ -231,7 +286,7 @@ export default function Player({
                 </div>
             </div>
 
-            {/* Controls */}
+            {/* Controls — buttons only; progress bar is a sibling grid item */}
             <div className={styles.controls}>
                 <div className={styles.buttons}>
                     <button
@@ -270,23 +325,12 @@ export default function Player({
                         </svg>
                     </button>
                 </div>
-
-                {/* Progress Bar */}
-                <div className={styles.progressRow}>
-                    <span className={styles.time}>{formatTime(currentTime)}</span>
-                    <div className={styles.progressBar} onClick={handleSeek}>
-                        <div
-                            className={styles.progressFill}
-                            style={{ width: `${progressPct}%` }}
-                        />
-                    </div>
-                    <span className={styles.time}>{formatTime(duration)}</span>
-                </div>
             </div>
 
-            {/* Volume */}
+            {/* Volume — desktop slider + mobile overlay toggle */}
             <div className={styles.volume}>
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                {/* Desktop slider */}
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
                     <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" />
                 </svg>
                 <input
@@ -296,7 +340,49 @@ export default function Player({
                     value={volume}
                     onChange={handleVolumeChange}
                     className={styles.volumeSlider}
+                    aria-label="Volume"
                 />
+
+                {/* Mobile volume button */}
+                <button
+                    className={styles.volumeBtn}
+                    onClick={() => setVolumeOpen((o) => !o)}
+                    aria-label="Volume"
+                    aria-expanded={volumeOpen}
+                >
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+                        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" />
+                    </svg>
+                </button>
+
+                {/* Mobile vertical slider overlay */}
+                {volumeOpen && (
+                    <div className={styles.volumeOverlay}>
+                        <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={volume}
+                            onChange={handleVolumeChange}
+                            className={styles.volumeOverlaySlider}
+                            aria-label="Volume"
+                            orient="vertical"
+                        />
+                        <span className={styles.volumeOverlayLabel}>{volume}%</span>
+                    </div>
+                )}
+            </div>
+
+            {/* Progress Bar — row 2 on mobile (full width), row 2 col 2 on desktop */}
+            <div className={styles.progressRow}>
+                <span className={styles.time}>{formatTime(currentTime)}</span>
+                <div className={styles.progressBar} onClick={handleSeek}>
+                    <div
+                        className={styles.progressFill}
+                        style={{ width: `${progressPct}%` }}
+                    />
+                </div>
+                <span className={styles.time}>{formatTime(duration)}</span>
             </div>
         </div>
     );

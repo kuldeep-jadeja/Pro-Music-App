@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/requireAuth';
 import {
     extractPlaylistId,
     getPublicPlaylistData,
+    runBackgroundItunesEnrichment,
 } from '@/lib/spotify';
 import { batchMatchTracks } from '@/lib/youtube';
 import Playlist from '@/models/Playlist';
@@ -135,7 +136,14 @@ async function handler(req, res) {
             },
         });
 
-        // 7. Background YouTube matching — fire-and-forget (only uncached tracks)
+        // 7a. Background album/art enrichment — fire-and-forget.
+        //     Runs the 3-tier pipeline (iTunes → Spotify OG → MusicBrainz) for
+        //     any track still missing album name or cover art.
+        runBackgroundItunesEnrichment(rawTracks).catch((err) =>
+            console.error('[Enrichment] Background enrichment failed:', err.message)
+        );
+
+        // 7b. Background YouTube matching — fire-and-forget (only uncached tracks)
         //    CRITICAL: Atomic guard prevents duplicate background tasks.
         //    We only flip to 'matching' if the playlist is NOT already in
         //    'matching' status.  If the atomic update returns null, another

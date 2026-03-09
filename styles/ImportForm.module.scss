@@ -1,13 +1,14 @@
 @use "variables" as *;
 
+// ── Idle — Input form ─────────────────────────────────────────
 .form {
     width: 100%;
-    max-width: 680px;
+    max-width: 640px;
 }
 
 .inputGroup {
     display: flex;
-    gap: 12px;
+    gap: 10px;
     align-items: center;
 }
 
@@ -18,18 +19,27 @@
     background: $bg-surface;
     border: 1px solid $bg-elevated;
     border-radius: $radius-full;
-    padding: 0 16px;
-    transition: border-color $transition-fast;
+    padding: 0 18px;
+    transition:
+        border-color $transition-fast,
+        box-shadow $transition-fast;
 
     &:focus-within {
         border-color: $accent;
+        box-shadow: 0 0 0 3px $accent-dim;
     }
 }
 
+.inputWrapperInvalid {
+    border-color: $danger;
+    box-shadow: 0 0 0 3px rgba(255, 79, 79, 0.15);
+}
+
 .icon {
-    color: $text-muted;
+    color: #1ed760; // Spotify green
     flex-shrink: 0;
     margin-right: 10px;
+    opacity: 0.85;
 }
 
 .input {
@@ -39,66 +49,299 @@
     outline: none;
     color: $text-primary;
     font-size: 0.9375rem;
-    padding: 12px 0;
+    padding: 13px 0;
 
     &::placeholder {
         color: $text-muted;
-    }
-
-    &:disabled {
-        opacity: 0.5;
     }
 }
 
 .button {
     flex-shrink: 0;
-    padding: 12px 24px;
+    padding: 13px 26px;
     background: $accent;
-    color: #000;
+    color: #fff;
     font-size: 0.875rem;
     font-weight: 700;
     border-radius: $radius-full;
-    transition:
-        background $transition-fast,
-        transform $transition-fast;
+    letter-spacing: 0.01em;
+    min-width: 148px;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 140px;
+    box-shadow: 0 4px 14px rgba(124, 92, 255, 0.35);
+    transition:
+        background $transition-fast,
+        transform $transition-fast,
+        box-shadow $transition-fast;
 
-    &:hover:not(:disabled) {
+    &:hover {
         background: $accent-hover;
-        transform: scale(1.02);
+        transform: scale(1.03);
+        box-shadow: 0 6px 22px rgba(124, 92, 255, 0.5);
     }
 
-    &:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
+    &:active {
+        transform: scale(0.98);
     }
 }
 
-.spinner {
-    width: 18px;
-    height: 18px;
-    border: 2px solid rgba(0, 0, 0, 0.2);
-    border-top-color: #000;
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
+.cancelBtn {
+    flex-shrink: 0;
+    padding: 8px 18px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: $radius-full;
+    color: $text-secondary;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    background: transparent;
+    transition:
+        color $transition-fast,
+        border-color $transition-fast,
+        background $transition-fast;
+
+    &:hover {
+        color: $text-primary;
+        border-color: rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    &:active {
+        transform: scale(0.97);
+    }
 }
 
 .error {
     color: $danger;
     font-size: 0.8125rem;
-    margin-top: 8px;
-    padding-left: 16px;
+    margin-top: 10px;
+    padding-left: 18px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    animation: fadeSlideIn 200ms ease both;
+
+    // Inline badge
+    &::before {
+        content: "!";
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+        background: rgba(255, 79, 79, 0.15);
+        border-radius: 50%;
+        font-size: 0.625rem;
+        font-weight: 800;
+    }
 }
 
-@keyframes spin {
+// ── State card — shared shell for all non-idle phases ─────────
+.stateCard {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    background: $bg-surface;
+    border: 1px solid $bg-elevated;
+    border-radius: $radius-xl;
+    padding: 18px 22px;
+    min-height: 76px;
+    max-width: 640px;
+    width: 100%;
+    animation: fadeSlideIn 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+// Text column inside state cards
+.stateBody {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.stateTitle {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: $text-primary;
+    @include truncate;
+}
+
+.stateDesc {
+    font-size: 0.8125rem;
+    color: $text-secondary;
+    @include truncate;
+}
+
+// ── Processing — spinning arc ─────────────────────────────────
+.processingRing {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    border: 2.5px solid rgba(255, 255, 255, 0.07);
+    border-top-color: $accent;
+    border-right-color: rgba(124, 92, 255, 0.35);
+    animation: ringRotate 0.85s linear infinite;
+}
+
+// ── Matching — cover art + progress bar ──────────────────────
+.coverThumb {
+    width: 52px;
+    height: 52px;
+    flex-shrink: 0;
+    border-radius: $radius-md;
+    object-fit: cover;
+    box-shadow:
+        0 4px 16px rgba(0, 0, 0, 0.55),
+        0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.coverThumbPlaceholder {
+    width: 52px;
+    height: 52px;
+    flex-shrink: 0;
+    border-radius: $radius-md;
+    background: $bg-surface-hover;
+    border: 1px solid $bg-elevated;
+    // Animated pulse so it doesn't look dead
+    animation: pulse 1.6s ease-in-out infinite;
+}
+
+.progressTrack {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: $radius-full;
+    overflow: hidden;
+    position: relative;
+    margin-top: 2px;
+}
+
+.progressFill {
+    position: absolute;
+    inset: 0 auto 0 0; // left-anchored, full height
+    background: linear-gradient(90deg, $accent 0%, $accent-secondary 100%);
+    border-radius: $radius-full;
+    transition: width 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+    min-width: 4px; // always show a sliver so it feels alive
+
+    // Shimmer sweep
+    &::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 55%;
+        height: 100%;
+        background: linear-gradient(
+            90deg,
+            transparent 0%,
+            rgba(255, 255, 255, 0.28) 50%,
+            transparent 100%
+        );
+        animation: shimmer 1.6s ease-in-out infinite;
+    }
+}
+
+.progressLabel {
+    font-size: 0.75rem;
+    color: $text-muted;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+}
+
+// ── Complete — success card ───────────────────────────────────
+.completeCard {
+    border-color: rgba(46, 204, 113, 0.22);
+    background: rgba(46, 204, 113, 0.05);
+}
+
+.checkmark {
+    width: 48px;
+    height: 48px;
+    flex-shrink: 0;
+    color: $success;
+    animation: checkPop 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+
+    svg {
+        width: 100%;
+        height: 100%;
+    }
+}
+
+// SVG circle — draws itself in 0.5 s
+.checkCircle {
+    stroke-dasharray: 157;
+    stroke-dashoffset: 157;
+    animation: drawStroke 0.5s ease forwards 0.05s;
+}
+
+// SVG check path — length ≈ 36px, use 42 for safety
+.checkPath {
+    stroke-dasharray: 42;
+    stroke-dashoffset: 42;
+    animation: drawStroke 0.38s ease forwards 0.48s;
+}
+
+// ── Keyframes ─────────────────────────────────────────────────
+@keyframes fadeSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(7px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes ringRotate {
     to {
         transform: rotate(360deg);
     }
 }
 
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(260%);
+    }
+}
+
+@keyframes drawStroke {
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+@keyframes checkPop {
+    0% {
+        transform: scale(0.55);
+        opacity: 0;
+    }
+    60% {
+        transform: scale(1.12);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+@keyframes pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.45;
+    }
+}
+
+// ── Responsive ────────────────────────────────────────────────
 @media (max-width: 640px) {
     .inputGroup {
         flex-direction: column;
@@ -106,5 +349,9 @@
 
     .button {
         width: 100%;
+    }
+
+    .stateCard {
+        padding: 16px 18px;
     }
 }

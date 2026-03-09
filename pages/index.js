@@ -1,181 +1,45 @@
 import Head from 'next/head';
 import Link from 'next/link';
-import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
-import Navbar from '@/components/Navbar';
 import ImportForm from '@/components/ImportForm';
-import PlaylistCard from '@/components/PlaylistCard';
 import TrackList from '@/components/TrackList';
-import Player from '@/components/Player';
+import PlaylistGrid from '@/components/PlaylistGrid';
+import QuickPicks from '@/components/QuickPicks';
+import { useAppContext } from '@/lib/AppContext';
 import styles from '@/styles/Home.module.scss';
 
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
 export default function Home() {
+  const {
+    user,
+    authChecked,
+    playlists,
+    loadingPlaylists,
+    activePlaylist,
+    loadingTracks,
+    handleImportSuccess,
+    loadPlaylist,
+    clearActivePlaylist,
+    tracks,
+    currentTrack,
+    handleTrackSelect,
+  } = useAppContext();
+
   const router = useRouter();
-  const [user, setUser] = useState(null);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [playlists, setPlaylists] = useState([]);
-  const [activePlaylist, setActivePlaylist] = useState(null);
-  const [tracks, setTracks] = useState([]);
-  const [currentTrack, setCurrentTrack] = useState(null);
-  const [currentIndex, setCurrentIndex] = useState(-1);
-  const [loadingTracks, setLoadingTracks] = useState(false);
+  const displayName = user?.name || user?.email?.split('@')[0] || 'there';
 
-  // Check auth status on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/auth/me');
-        if (res.ok) {
-          const data = await res.json();
-          setUser(data.user);
-        }
-      } catch {
-        // Not authenticated — that's fine
-      } finally {
-        setAuthChecked(true);
-      }
-    })();
-  }, []);
-
-  // Fetch user's playlists when authenticated
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      try {
-        const res = await fetch('/api/playlists');
-        if (res.ok) {
-          const data = await res.json();
-          setPlaylists(
-            (data.playlists || []).map((p) => ({
-              id: p._id,
-              name: p.name,
-              status: p.status,
-              importProgress: p.importProgress,
-              coverImage: p.coverImage,
-            }))
-          );
-        }
-      } catch (err) {
-        console.error('Failed to fetch playlists:', err);
-      }
-    })();
-  }, [user]);
-
-  // Logout handler
-  const handleLogout = async () => {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-    } catch {
-      // ignore
-    }
-    setUser(null);
-    setPlaylists([]);
-    setActivePlaylist(null);
-    setTracks([]);
-    setCurrentTrack(null);
-    setCurrentIndex(-1);
-    router.push('/login');
-  };
-
-  // Load full playlist with tracks
-  // Declared first — handleImportSuccess depends on this in its useCallback
-  // dependency array, so it must be initialized before that hook runs to
-  // avoid a const Temporal Dead Zone (TDZ) ReferenceError at prerender time.
-  const loadPlaylist = useCallback(async (playlistId) => {
-    setLoadingTracks(true);
-    try {
-      const res = await fetch(`/api/playlist/${playlistId}`);
-      const data = await res.json();
-
-      if (res.ok) {
-        setActivePlaylist(data);
-        setTracks(data.tracks || []);
-      }
-    } catch (err) {
-      console.error('Failed to load playlist:', err);
-    } finally {
-      setLoadingTracks(false);
-    }
-  }, []);
-
-  // Handle successful import
-  const handleImportSuccess = useCallback((playlist) => {
-    setPlaylists((prev) => {
-      const exists = prev.find((p) => p.id === playlist.id);
-      if (exists) {
-        return prev.map((p) => (p.id === playlist.id ? playlist : p));
-      }
-      return [playlist, ...prev];
-    });
-
-    // Auto-load the imported playlist
-    loadPlaylist(playlist.id);
-  }, [loadPlaylist]);
-
-  // Poll for playlist status updates (matching -> ready/paused/error)
-  // Uses the lightweight /api/playlist/[id]/status endpoint that returns
-  // only { status, importProgress } — no .populate('tracks'), no full
-  // track serialization.  The full playlist (with tracks) is fetched ONCE
-  // when status transitions to 'ready'.
-  useEffect(() => {
-    if (
-      !activePlaylist ||
-      activePlaylist.status === 'ready' ||
-      activePlaylist.status === 'paused' ||
-      activePlaylist.status === 'error'
-    ) {
-      return;
-    }
-
-    const pollInterval = setInterval(async () => {
-      try {
-        // Lightweight status-only fetch — 2 fields, no populate
-        const res = await fetch(`/api/playlist/${activePlaylist.id}/status`);
-        const data = await res.json();
-
-        if (!res.ok) return;
-
-        // Update progress in the active playlist view
-        setActivePlaylist((prev) =>
-          prev ? { ...prev, status: data.status, importProgress: data.importProgress } : prev
-        );
-
-        // Terminal state reached — fetch full playlist with tracks once
-        if (data.status === 'ready' || data.status === 'paused' || data.status === 'error') {
-          clearInterval(pollInterval);
-
-          // Update sidebar card status
-          setPlaylists((prev) =>
-            prev.map((p) =>
-              p.id === activePlaylist.id
-                ? { ...p, status: data.status }
-                : p
-            )
-          );
-
-          // Fetch the full playlist (with tracks) now that matching is done
-          if (data.status === 'ready') {
-            loadPlaylist(activePlaylist.id);
-          }
-        }
-      } catch {
-        /* ignore polling errors */
-      }
-    }, 3000);
-
-    return () => clearInterval(pollInterval);
-  }, [activePlaylist?.id, activePlaylist?.status]);
-
-  // Track selection
-  const handleTrackSelect = (track, index) => {
-    setCurrentTrack(track);
-    setCurrentIndex(index);
-  };
-
-  const handleTrackChange = (track, index) => {
-    setCurrentTrack(track);
-    setCurrentIndex(index);
-  };
+  const matchedCount = !loadingTracks && tracks?.length > 0
+    ? tracks.filter(t => t.youtubeVideoId).length
+    : 0;
+  const matchPct = tracks?.length > 0
+    ? Math.round((matchedCount / tracks.length) * 100)
+    : 0;
 
   return (
     <>
@@ -184,101 +48,178 @@ export default function Home() {
         <meta name="description" content="Import Spotify playlists and stream for free" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
 
-      <div className={styles.app}>
-        <Navbar user={user} onLogout={handleLogout} />
+      {/* While the session cookie is being verified, show nothing to prevent
+          the guest CTA flashing briefly after login/signup redirect. */}
+      {!authChecked ? null : user ? (
+        <>
+          {/* Hero greeting */}
+          <div className={styles.hero}>
+            <h1 className={styles.greeting}>
+              {getGreeting()},{' '}
+              <span className={styles.greetingName}>{displayName}</span>
+            </h1>
+            <p className={styles.greetingSub}>What do you want to listen to today?</p>
+          </div>
 
-        <main className={styles.main}>
-          {/* Sidebar */}
-          <aside className={styles.sidebar}>
-            <h2 className={styles.sidebarTitle}>Your Library</h2>
-            {!user ? (
-              <p className={styles.sidebarEmpty}>
-                <Link href="/login">Log in</Link> to see your playlists
-              </p>
-            ) : playlists.length === 0 ? (
-              <p className={styles.sidebarEmpty}>
-                Import a Spotify playlist to get started
-              </p>
-            ) : (
-              <div className={styles.playlistGrid}>
-                {playlists.map((pl) => (
-                  <PlaylistCard
-                    key={pl.id}
-                    playlist={pl}
-                    onClick={() => loadPlaylist(pl.id)}
-                  />
-                ))}
+          {/* Quick Picks — fast-access shelf of playable tracks */}
+          <QuickPicks
+            playlist={activePlaylist}
+            tracks={tracks}
+            currentTrack={currentTrack}
+            onTrackSelect={handleTrackSelect}
+          />
+
+          {/* Import card */}
+          <div id="import" className={styles.importCard}>
+            <div className={styles.importCardHeader}>
+              <svg
+                className={styles.importCardIcon}
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z" />
+              </svg>
+              <div>
+                <h2 className={styles.importCardTitle}>Import from Spotify</h2>
+                <p className={styles.importCardDesc}>
+                  Paste a Spotify playlist link to add it to your library
+                </p>
               </div>
-            )}
-          </aside>
+            </div>
+            <ImportForm onImportSuccess={handleImportSuccess} />
+          </div>
 
-          {/* Content */}
-          <section className={styles.content}>
-            {user ? (
-              <ImportForm onImportSuccess={handleImportSuccess} />
-            ) : (
-              <div className={styles.loginCta}>
-                <h2>Welcome to Demus</h2>
-                <p>Import Spotify playlists and stream for free.</p>
-                <Link href="/login" className={styles.ctaBtn}>Log in to get started</Link>
-              </div>
-            )}
+          {/* Playlists grid */}
+          {(loadingPlaylists || playlists?.length > 0) && (
+            <PlaylistGrid
+              id="playlists"
+              title="Your Library"
+              playlists={playlists}
+              loading={loadingPlaylists}
+              onPlaylistClick={(pl) => router.push(`/playlist/${pl.id}`)}
+            />
+          )}
 
-            {activePlaylist && (
-              <div className={styles.playlistHeader}>
+          {/* Active playlist view */}
+          {activePlaylist && (
+            <>
+              <div id="playlist-view" className={styles.playlistView}>
                 {activePlaylist.coverImage && (
-                  <img
-                    src={activePlaylist.coverImage}
-                    alt={activePlaylist.name}
-                    className={styles.playlistCover}
+                  <div
+                    className={styles.playlistBg}
+                    style={{ backgroundImage: `url(${activePlaylist.coverImage})` }}
+                    aria-hidden="true"
                   />
                 )}
-                <div className={styles.playlistMeta}>
-                  <span className={styles.playlistLabel}>PLAYLIST</span>
-                  <h1 className={styles.playlistName}>{activePlaylist.name}</h1>
-                  <p className={styles.playlistDesc}>
-                    {activePlaylist.owner} &middot; {activePlaylist.trackCount} tracks
+                <div className={styles.playlistBgOverlay} aria-hidden="true" />
+                {/* Back / close button */}
+                <button
+                  className={styles.playlistCloseBtn}
+                  onClick={clearActivePlaylist}
+                  aria-label="Close playlist view"
+                >
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+                    <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
+                  </svg>
+                  Back
+                </button>
+                <div className={styles.playlistContent}>
+                  <div className={styles.playlistArtWrap}>
+                    {activePlaylist.coverImage ? (
+                      <img
+                        src={activePlaylist.coverImage}
+                        alt={activePlaylist.name}
+                        className={styles.playlistCover}
+                      />
+                    ) : (
+                      <div className={styles.playlistArtPlaceholder}>
+                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                          <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                  <div className={styles.playlistMeta}>
+                    <span className={styles.playlistLabel}>PLAYLIST</span>
+                    <h2 className={styles.playlistName}>{activePlaylist.name}</h2>
+                    <p className={styles.playlistDesc}>
+                      {activePlaylist.owner} &middot; {activePlaylist.trackCount} tracks
+                    </p>
+                    {!loadingTracks && tracks?.length > 0 && (
+                      <div className={styles.matchProgress}>
+                        <div className={styles.progressBar}>
+                          <div
+                            className={styles.progressFill}
+                            style={{ width: `${matchPct}%` }}
+                          />
+                        </div>
+                        <span className={styles.progressLabel}>
+                          {matchedCount} / {tracks.length} matched
+                        </span>
+                      </div>
+                    )}
                     {activePlaylist.status !== 'ready' && (
-                      <span className={styles.statusBadge}>
+                      <span
+                        className={`${styles.statusPill} ${styles[`status_${activePlaylist.status}`] ?? ''
+                          }`}
+                      >
                         {activePlaylist.status === 'matching'
-                          ? ' — Finding YouTube matches...'
+                          ? 'Finding YouTube matches…'
                           : activePlaylist.status === 'paused'
-                            ? ' — Paused (rate limited)'
+                            ? 'Paused — rate limited'
                             : activePlaylist.status === 'error'
-                              ? ' — Error'
-                              : ''}
+                              ? 'Error'
+                              : activePlaylist.status}
                       </span>
                     )}
-                  </p>
+                  </div>
                 </div>
               </div>
-            )}
 
-            {loadingTracks ? (
-              <div className={styles.loading}>
-                <span className={styles.spinner} />
-                <p>Loading tracks...</p>
-              </div>
-            ) : (
-              <TrackList
-                tracks={tracks}
-                currentTrackId={currentTrack?.id}
-                onTrackSelect={handleTrackSelect}
+              {loadingTracks ? (
+                <div className={styles.loading}>
+                  <span className={styles.spinner} />
+                  <p>Loading tracks…</p>
+                </div>
+              ) : (
+                <TrackList
+                  tracks={tracks}
+                  currentTrackId={currentTrack?.id}
+                  onTrackSelect={handleTrackSelect}
+                />
+              )}
+            </>
+          )}
+        </>
+      ) : (
+        /* Guest CTA */
+        <div className={styles.loginCta}>
+          <div className={styles.ctaLogo} aria-hidden="true">
+            <svg viewBox="0 0 64 64" fill="none">
+              <circle cx="32" cy="32" r="32" fill="#7C5CFF" opacity="0.12" />
+              <path
+                d="M32 12C20.96 12 12 20.96 12 32s8.96 20 20 20 20-8.96 20-20S43.04 12 32 12zm-4 29V23l14 9-14 9z"
+                fill="#7C5CFF"
               />
-            )}
-          </section>
-        </main>
-
-        {/* Player Bar */}
-        <Player
-          track={currentTrack}
-          playlist={tracks}
-          currentIndex={currentIndex}
-          onTrackChange={handleTrackChange}
-        />
-      </div>
+            </svg>
+          </div>
+          <h2 className={styles.ctaTitle}>Welcome to Demus</h2>
+          <p className={styles.ctaSubtitle}>Import Spotify playlists and stream for free.</p>
+          <div className={styles.ctaActions}>
+            <Link href="/signup" className={styles.ctaBtn}>
+              Get started free
+            </Link>
+            <Link href="/login" className={styles.ctaBtnSecondary}>
+              Log in
+            </Link>
+          </div>
+        </div>
+      )}
     </>
   );
 }
+
