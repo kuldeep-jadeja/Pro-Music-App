@@ -6,7 +6,9 @@
         "dev": "next dev",
         "build": "next build",
         "start": "next start -p 4072",
-        "ytmatch:worker": "node --env-file=.env.local workers/ytMatchWorker.js"
+        "ytmatch:worker": "node --env-file=.env.local workers/ytMatchWorker.js",
+        "populate:charts": "node workers/chartsWorker.js",
+        "crawl:artists": "node workers/artistCrawler.js"
     },
     "dependencies": {
         "@ducanh2912/next-pwa": "^10.2.9",
