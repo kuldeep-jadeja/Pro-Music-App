@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  reactStrictMode: false,
   // PWA is handled via a hand-written service worker in /public/sw.js
   // (avoids Turbopack ↔ webpack incompatibility with next-pwa)
   images: {
