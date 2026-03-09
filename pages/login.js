@@ -166,7 +166,8 @@ export default function Login() {
             }
 
             setUser(data.user);
-            router.push('/');
+            const from = router.query.from;
+            router.push(typeof from === 'string' && from.startsWith('/') ? from : '/');
         } catch {
             setError('Network error. Please try again.');
         } finally {
