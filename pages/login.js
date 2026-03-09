@@ -164,10 +164,8 @@ export default function Login() {
                 setError(data.error || 'Login failed.');
                 return;
             }
-
+            router.push('/');
             setUser(data.user);
-            const from = router.query.from;
-            router.push(typeof from === 'string' && from.startsWith('/') ? from : '/');
         } catch {
             setError('Network error. Please try again.');
         } finally {
