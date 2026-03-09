@@ -1,30 +1,32 @@
 {
-  "name": "spotify_knockoff",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start -p 4072"
-  },
-  "dependencies": {
-    "@ducanh2912/next-pwa": "^10.2.9",
-    "axios": "^1.13.6",
-    "bcrypt": "^6.0.0",
-    "cookie": "^1.1.1",
-    "crypto-js": "^4.2.0",
-    "framer-motion": "^12.35.1",
-    "jsonwebtoken": "^9.0.3",
-    "lucide-react": "^0.577.0",
-    "mongoose": "^9.2.3",
-    "next": "16.1.6",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "sass": "^1.97.3",
-    "spotify-url-info": "^3.2.18",
-    "yt-search": "^2.13.1"
-  },
-  "devDependencies": {
-    "sharp": "^0.34.5"
-  }
+    "name": "spotify_knockoff",
+    "version": "0.1.0",
+    "private": true,
+    "scripts": {
+        "dev": "next dev",
+        "build": "next build",
+        "start": "next start -p 4072",
+        "ytmatch:worker": "node --env-file=.env.local workers/ytMatchWorker.js"
+    },
+    "dependencies": {
+        "@ducanh2912/next-pwa": "^10.2.9",
+        "axios": "^1.13.6",
+        "bcrypt": "^6.0.0",
+        "cookie": "^1.1.1",
+        "crypto-js": "^4.2.0",
+        "framer-motion": "^12.35.1",
+        "ioredis": "^5.10.0",
+        "jsonwebtoken": "^9.0.3",
+        "lucide-react": "^0.577.0",
+        "mongoose": "^9.2.3",
+        "next": "16.1.6",
+        "react": "19.2.3",
+        "react-dom": "19.2.3",
+        "sass": "^1.97.3",
+        "spotify-url-info": "^3.2.18",
+        "yt-search": "^2.13.1"
+    },
+    "devDependencies": {
+        "sharp": "^0.34.5"
+    }
 }
