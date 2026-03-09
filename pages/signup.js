@@ -201,4 +201,11 @@ export default function Signup() {
     );
 }
 
+export async function getServerSideProps({ req }) {
+    if (req.cookies?.token) {
+        return { redirect: { destination: '/', permanent: false } };
+    }
+    return { props: {} };
+}
+
 Signup.getLayout = (page) => page;

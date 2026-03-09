@@ -31,7 +31,7 @@ $cols-compact: 48px 1fr 72px;
 // ── Header ───────────────────────────────────────────────────
 .header {
     padding-bottom: 10px;
-    border-bottom: 1px solid $bg-elevated;
+    border-bottom: 1px solid $border-subtle;
     font-size: 0.6875rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -217,7 +217,7 @@ $cols-compact: 48px 1fr 72px;
 .badge {
     font-size: 0.6875rem;
     color: $text-muted;
-    background: $bg-elevated;
+    background: $bg-surface;
     padding: 2px 8px;
     border-radius: $radius-full;
 }
@@ -271,6 +271,52 @@ $cols-compact: 48px 1fr 72px;
     font-size: 0.875rem;
     text-align: center;
     padding: 48px 0;
+}
+
+// ── Zero-playable empty state ─────────────────────────────────
+// Shown when every track in a "ready" playlist has no YouTube match.
+.noMatches {
+    margin: 24px 0;
+    padding: 24px 28px;
+    background: rgba($accent, 0.06);
+    border: 1px solid rgba($accent, 0.18);
+    border-radius: $radius-lg;
+    text-align: center;
+}
+
+.noMatchesTitle {
+    margin: 0 0 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    color: $text-primary;
+}
+
+.noMatchesDesc {
+    margin: 0;
+    font-size: 0.875rem;
+    color: $text-muted;
+    line-height: 1.5;
+}
+
+// ── Unavailable section divider ───────────────────────────────
+.unavailableDivider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 20px 16px 8px;
+    color: $text-muted;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+
+    &::before,
+    &::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: rgba(255, 255, 255, 0.06);
+    }
 }
 
 // ── Currently playing animation ───────────────────────────────

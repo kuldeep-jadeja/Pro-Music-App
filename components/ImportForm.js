@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useAppContext } from '@/lib/AppContext';
 import styles from '@/styles/ImportForm.module.scss';
 
@@ -17,6 +18,7 @@ export default function ImportForm({ onImportSuccess }) {
     const { activeImport, startTrackingImport, dismissImport } = useAppContext();
     const [url, setUrl] = useState('');
     const [urlError, setUrlError] = useState('');
+    const [touched, setTouched] = useState(false);
     const [localPhase, setLocalPhase] = useState(IDLE); // only IDLE | PROCESSING
     const [error, setError] = useState('');
 
@@ -50,6 +52,7 @@ export default function ImportForm({ onImportSuccess }) {
         }
         setError('');
         setUrlError('');
+        setTouched(false);
         setUrl('');
     };
 
@@ -169,6 +172,9 @@ export default function ImportForm({ onImportSuccess }) {
                 <div className={styles.stateBody}>
                     <span className={styles.stateTitle}>Playlist ready!</span>
                     <span className={styles.stateDesc}>{activeImport.name}</span>
+                    <Link href={`/playlist/${activeImport.id}`} className={styles.viewBtn}>
+                        View Playlist &#8594;
+                    </Link>
                 </div>
             </div>
         );
@@ -194,6 +200,10 @@ export default function ImportForm({ onImportSuccess }) {
                         className={styles.input}
                         value={url}
                         onChange={handleUrlChange}
+                        onBlur={() => {
+                            setTouched(true);
+                            if (!url.trim()) setUrlError('Paste a Spotify playlist URL to get started');
+                        }}
                         placeholder="Paste Spotify playlist URL here…"
                     />
                 </div>

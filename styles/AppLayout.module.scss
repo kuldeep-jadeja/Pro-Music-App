@@ -5,12 +5,40 @@
 .shell {
     display: flex;
     height: 100vh;
-    height: 100dvh; // Dynamic viewport height — accounts for mobile browser chrome
+    height: 100dvh;
     background: $bg-primary;
     overflow: hidden;
 }
 
-// ── Body (everything right of sidebar) ───────────────────────
+// ── Ambient glow orbs ─────────────────────────────────────────
+.shell::before,
+.shell::after {
+    content: "";
+    position: fixed;
+    pointer-events: none;
+    z-index: 0;
+    border-radius: 50%;
+}
+
+.shell::before {
+    top: -80px;
+    left: -60px;
+    width: 600px;
+    height: 500px;
+    background: rgba($accent, 0.03);
+    filter: blur(180px);
+}
+
+.shell::after {
+    bottom: -60px;
+    right: -40px;
+    width: 500px;
+    height: 400px;
+    background: rgba($accent-teal, 0.02);
+    filter: blur(150px);
+}
+
+// ── Body (right of sidebar) ───────────────────────────────────
 .body {
     flex: 1;
     display: flex;
@@ -19,114 +47,147 @@
     margin-left: $sidebar-width;
     height: 100vh;
     overflow: hidden;
+    position: relative;
+    z-index: 1;
     transition: margin-right $transition-normal;
-
-    // Panel is always rendered (and visible) on wide screens,
-    // so always compensate with margin-right regardless of play state.
-    @media (min-width: $breakpoint-panel) {
-        margin-right: $panel-width;
-    }
 
     @media (max-width: $breakpoint-mobile) {
         margin-left: 0;
     }
 }
 
-// Kept for backwards compatibility — no-op at panel breakpoint now
 .bodyWithPanel {
 }
 
-// ── Scrollable content beneath navbar ────────────────────────
+// ── Panel-open layout adjustments ────────────────────────────
+// When the NowPlaying panel is open, shift the body and player
+// slot left so content doesn't slide under the panel.
+.shellPanelOpen {
+    .body {
+        @media (min-width: $breakpoint-panel) {
+            margin-right: $panel-width;
+        }
+    }
+
+    .playerSlot {
+        @media (min-width: $breakpoint-panel) {
+            right: $panel-width;
+        }
+    }
+
+    .importChip {
+        @media (min-width: $breakpoint-panel) {
+            right: calc(#{$panel-width} + 24px);
+        }
+    }
+}
+
+// ── Scrollable content ────────────────────────────────────────
 .content {
     flex: 1;
     overflow-y: auto;
-    padding: 28px 32px calc(#{$player-height} + 28px);
+    padding: 24px 32px calc(#{$player-height} + 96px);
     margin-top: $navbar-height;
 
     @media (max-width: $breakpoint-mobile) {
         padding: 20px 16px
             calc(
-                #{$player-height-mobile} + #{$tab-bar-height} +
-                    env(safe-area-inset-bottom) + 20px
+                #{$player-height} + #{$tab-bar-height} +
+                    env(safe-area-inset-bottom, 0px) + 24px
             );
     }
 
-    // Custom scrollbar to match dark theme
+    @media (max-width: $breakpoint-mobile) and (max-height: 500px) and (orientation: landscape) {
+        padding: 16px 16px
+            calc(
+                #{$player-height} + 48px + env(safe-area-inset-bottom, 0px) +
+                    8px
+            );
+    }
+
     scrollbar-width: thin;
-    scrollbar-color: $bg-elevated transparent;
+    scrollbar-color: $bg-surface transparent;
 
     &::-webkit-scrollbar {
         width: 6px;
     }
-
     &::-webkit-scrollbar-track {
         background: transparent;
     }
-
     &::-webkit-scrollbar-thumb {
-        background: $bg-elevated;
+        background: $bg-surface;
         border-radius: $radius-full;
     }
 }
 
-// ── Max-width content container ─────────────────────────────
+// ── Content container ─────────────────────────────────────────
 .container {
     max-width: 1200px;
     margin: 0 auto;
 }
 
-// ── Backdrop overlay (mobile sidebar) ────────────────────────
+// ── Mobile sidebar backdrop ───────────────────────────────────
 .backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
-    z-index: 109;
+    background: rgba($bg-primary, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 40;
 }
 
-// ── Player slot (fixed bottom, full width) ───────────────────
+// ── Floating player slot ─────────────────────────────────────
 .playerSlot {
     position: fixed;
-    bottom: 0;
-    left: 0;
+    bottom: 16px;
+    left: $sidebar-width;
     right: 0;
     z-index: 120;
-
-    @media (min-width: $breakpoint-panel) {
-        right: $panel-width;
-    }
-
-    @media (max-width: $breakpoint-mobile) {
-        bottom: calc(#{$tab-bar-height} + env(safe-area-inset-bottom));
-        right: 0;
-    }
-}
-
-// ── Floating import progress chip ────────────────────────────
-.importChip {
-    position: fixed;
-    bottom: calc(#{$player-height} + 12px);
-    right: 16px;
-    z-index: 125;
     display: flex;
-    align-items: center;
-    gap: 10px;
-    background: $bg-surface;
-    border: 1px solid $bg-elevated;
-    border-radius: $radius-lg;
-    padding: 8px 10px 8px 10px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
-    min-width: 220px;
-    max-width: 280px;
-    animation: chipSlideIn 200ms ease;
+    justify-content: center;
+    padding: 0 16px;
+    pointer-events: none;
 
-    @media (min-width: $breakpoint-panel) {
-        right: calc(#{$panel-width} + 16px);
+    > * {
+        pointer-events: all;
+        width: 100%;
+        max-width: 900px;
     }
 
     @media (max-width: $breakpoint-mobile) {
         bottom: calc(
-            #{$player-height-mobile} + #{$tab-bar-height} +
-                env(safe-area-inset-bottom) + 8px
+            #{$tab-bar-height} + env(safe-area-inset-bottom, 0px) + 8px
+        );
+        left: 0;
+        padding: 0 8px;
+    }
+
+    @media (max-width: $breakpoint-mobile) and (max-height: 500px) and (orientation: landscape) {
+        bottom: calc(48px + env(safe-area-inset-bottom, 0px) + 8px);
+    }
+}
+
+// ── Floating import progress chip ─────────────────────────────
+.importChip {
+    position: fixed;
+    bottom: calc(#{$player-height} + 40px);
+    right: 24px;
+    z-index: 125;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    @include glass;
+    border-radius: $radius-lg;
+    padding: 10px 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    min-width: 220px;
+    max-width: 280px;
+    animation: chipSlideIn 200ms ease;
+
+    @media (max-width: $breakpoint-mobile) {
+        bottom: calc(
+            #{$player-height} + #{$tab-bar-height} +
+                env(safe-area-inset-bottom, 0px) + 8px
         );
         right: 12px;
         min-width: 180px;
@@ -134,8 +195,7 @@
 }
 
 .importChipDone {
-    border-color: rgba($success, 0.4);
-    background: color.mix(#000, $success, 85%);
+    border-color: rgba($success, 0.3);
 }
 
 .importChipCover {
@@ -166,7 +226,7 @@
 .importChipTrack {
     height: 3px;
     border-radius: $radius-full;
-    background: $bg-elevated;
+    background: rgba(white, 0.1);
     overflow: hidden;
 }
 
@@ -201,7 +261,7 @@
 
     &:hover {
         color: $text-primary;
-        background: $bg-elevated;
+        background: rgba(white, 0.08);
     }
 }
 

@@ -26,7 +26,9 @@ import { registerAudioUnlock } from '@/lib/unlockAudio';
 //            duration, volume, isReady, isLoading
 //   Actions: play(videoId), playTrack(track, index, queue?), togglePlay(),
 //            seek(seconds), setVolume(val), playNext(), playPrevious(),
-//            setQueue(tracks), initPlayer(containerId)
+//            setQueue(tracks), initPlayer(containerId),
+//            toggleShuffle(), cycleRepeat()
+//   Modes:   isShuffleOn (bool), repeatMode ('off'|'all'|'one')
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PlayerContext = createContext(null);
@@ -45,6 +47,8 @@ export function PlayerProvider({ children }) {
     const [volume, setVolumeState] = useState(80);
     const [isReady, setIsReady] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [isShuffleOn, setIsShuffleOn] = useState(false);
+    const [repeatMode, setRepeatMode] = useState('off'); // 'off' | 'all' | 'one'
 
     // ── Refs for stale-closure prevention ─────────────────────────────────
     // The YT.Player callbacks (onStateChange, onError) are bound once at
@@ -53,11 +57,17 @@ export function PlayerProvider({ children }) {
     const queueRef = useRef(queue);
     const currentIndexRef = useRef(currentIndex);
     const volumeRef = useRef(volume);
+    const isShuffleOnRef = useRef(false);
+    const repeatModeRef = useRef('off');
+    const shuffledOrderRef = useRef([]); // array of queue indices in shuffled order
+    const shufflePositionRef = useRef(0); // current position in shuffledOrderRef
     const playNextRef = useRef(null); // populated after playNext is defined
 
     useEffect(() => { queueRef.current = queue; }, [queue]);
     useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
     useEffect(() => { volumeRef.current = volume; }, [volume]);
+    useEffect(() => { isShuffleOnRef.current = isShuffleOn; }, [isShuffleOn]);
+    useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
 
     // ── Time tracking ─────────────────────────────────────────────────────
     const stopTimeTracking = useCallback(() => {
@@ -150,6 +160,38 @@ export function PlayerProvider({ children }) {
         }
     }, [startTimeTracking, stopTimeTracking]);
 
+    // ── Shuffle helpers ────────────────────────────────────────────────────
+    const buildShuffledOrder = useCallback((q, startIdx) => {
+        const indices = q.map((_, i) => i).filter(i => i !== startIdx);
+        // Fisher-Yates shuffle
+        for (let i = indices.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [indices[i], indices[j]] = [indices[j], indices[i]];
+        }
+        return [startIdx, ...indices];
+    }, []);
+
+    const toggleShuffle = useCallback(() => {
+        setIsShuffleOn(prev => {
+            const next = !prev;
+            if (next) {
+                const order = buildShuffledOrder(queueRef.current, currentIndexRef.current);
+                shuffledOrderRef.current = order;
+                shufflePositionRef.current = 0;
+            }
+            return next;
+        });
+    }, [buildShuffledOrder]);
+
+    const cycleRepeat = useCallback(() => {
+        setRepeatMode(prev => {
+            const modes = ['off', 'all', 'one'];
+            const next = modes[(modes.indexOf(prev) + 1) % modes.length];
+            repeatModeRef.current = next;
+            return next;
+        });
+    }, []);
+
     // ── Match a single track via the API ──────────────────────────────────
     // Checks MongoDB cache first; scrapes YouTube only on a cache miss.
     const matchTrack = useCallback(async (track) => {
@@ -212,8 +254,16 @@ export function PlayerProvider({ children }) {
             if (q[index + 1]) {
                 matchTrack(q[index + 1]).catch(() => { /* non-critical */ });
             }
+
+            // ── Rebuild shuffled order when a track is selected directly ──
+            // This ensures next/previous navigate from the newly chosen track.
+            if (isShuffleOnRef.current) {
+                const order = buildShuffledOrder(q, index);
+                shuffledOrderRef.current = order;
+                shufflePositionRef.current = 0;
+            }
         }
-    }, [matchTrack, play]);
+    }, [matchTrack, play, buildShuffledOrder]);
 
     // ── Toggle play / pause ───────────────────────────────────────────────
     const togglePlay = useCallback(() => {
@@ -251,13 +301,47 @@ export function PlayerProvider({ children }) {
     const playNext = useCallback(() => {
         const q = queueRef.current;
         const idx = currentIndexRef.current;
-        if (!q || idx >= q.length - 1) return;
+        const repeat = repeatModeRef.current;
+        const shuffle = isShuffleOnRef.current;
 
-        // Skip tracks that have no YouTube match — only play matched tracks.
+        // Repeat one: replay the current track from the start
+        if (repeat === 'one') {
+            if (q[idx]) playTrack(q[idx], idx);
+            return;
+        }
+
+        // Shuffle mode: advance through the shuffled order
+        if (shuffle) {
+            const order = shuffledOrderRef.current;
+            let nextPos = shufflePositionRef.current + 1;
+            if (nextPos >= order.length) {
+                if (repeat === 'all') {
+                    nextPos = 0;
+                } else {
+                    return;
+                }
+            }
+            shufflePositionRef.current = nextPos;
+            const nextIdx = order[nextPos];
+            playTrack(q[nextIdx], nextIdx);
+            return;
+        }
+
+        // Normal sequential playback
         for (let i = idx + 1; i < q.length; i++) {
             if (q[i].youtubeVideoId) {
                 playTrack(q[i], i);
                 return;
+            }
+        }
+
+        // Reached end — wrap around if repeat all
+        if (repeat === 'all') {
+            for (let i = 0; i < idx; i++) {
+                if (q[i].youtubeVideoId) {
+                    playTrack(q[i], i);
+                    return;
+                }
             }
         }
         // No playable track found ahead — stop playback silently.
@@ -266,6 +350,19 @@ export function PlayerProvider({ children }) {
     const playPrevious = useCallback(() => {
         const q = queueRef.current;
         const idx = currentIndexRef.current;
+        const shuffle = isShuffleOnRef.current;
+
+        // Shuffle mode: step back through the shuffled order
+        if (shuffle) {
+            const order = shuffledOrderRef.current;
+            let prevPos = shufflePositionRef.current - 1;
+            if (prevPos < 0) prevPos = order.length - 1;
+            shufflePositionRef.current = prevPos;
+            const prevIdx = order[prevPos];
+            playTrack(q[prevIdx], prevIdx);
+            return;
+        }
+
         if (!q || idx <= 0) return;
 
         // Skip tracks that have no YouTube match — only play matched tracks.
@@ -298,6 +395,8 @@ export function PlayerProvider({ children }) {
         volume,
         isReady,
         isLoading,
+        isShuffleOn,
+        repeatMode,
 
         // Initialisation (called by GlobalPlayer)
         initPlayer,
@@ -312,6 +411,12 @@ export function PlayerProvider({ children }) {
         playNext,
         playPrevious,
         setQueue,
+        toggleShuffle,
+        cycleRepeat,
+
+        // Modes
+        isShuffleOn,
+        repeatMode,
     };
 
     return (

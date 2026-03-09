@@ -329,7 +329,7 @@
     font-family: $font-sans;
     letter-spacing: 0.02em;
     border: none;
-    border-radius: 16px;
+    border-radius: $radius-full;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -407,7 +407,7 @@
     justify-content: center;
     gap: 12px;
     padding: 12px;
-    border-radius: 16px;
+    border-radius: $radius-full;
     border: 1px solid rgba($text-muted, 0.15);
     background: transparent;
     color: $text-primary;

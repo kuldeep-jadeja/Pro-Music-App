@@ -82,13 +82,10 @@ export default function Sidebar({
         return () => observer.disconnect();
     }, [isHome]);
 
-    // ── Playlist click: load + scroll to playlist view ───────
+    // ── Playlist click: navigate to playlist page ────────────
     const handlePlaylistClick = (playlistId) => {
         onPlaylistClick?.(playlistId);
-        // Scroll to the active playlist view after React renders it
-        setTimeout(() => {
-            document.getElementById('playlist-view')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 80);
+        onClose?.(); // close mobile sidebar
     };
 
     // ── Section nav: smooth-scroll when already on home ──────
@@ -194,7 +191,10 @@ export default function Sidebar({
                     <div className={styles.avatar} aria-hidden="true">
                         {user.email?.[0]?.toUpperCase()}
                     </div>
-                    <span className={styles.userEmail}>{user.email}</span>
+                    <div className={styles.userMeta}>
+                        <span className={styles.userEmail}>{user.email}</span>
+                        <span className={styles.userPlan}>Free Plan</span>
+                    </div>
                 </div>
             )}
         </aside>

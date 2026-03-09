@@ -257,6 +257,28 @@
     background: rgba(46, 204, 113, 0.05);
 }
 
+.viewBtn {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 6px;
+    padding: 3px 12px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: $accent;
+    border: 1px solid rgba($accent, 0.3);
+    border-radius: $radius-full;
+    text-decoration: none;
+    white-space: nowrap;
+    transition:
+        background $transition-fast,
+        border-color $transition-fast;
+
+    &:hover {
+        background: rgba($accent, 0.08);
+        border-color: rgba($accent, 0.5);
+    }
+}
+
 .checkmark {
     width: 48px;
     height: 48px;

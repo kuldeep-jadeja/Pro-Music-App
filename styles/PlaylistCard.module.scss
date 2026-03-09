@@ -141,8 +141,8 @@
 }
 
 .badge_matching {
-    color: #3b82f6;
-    background: rgba(59, 130, 246, 0.12);
+    color: $accent;
+    background: rgba($accent, 0.15);
 }
 
 .badge_ready {
