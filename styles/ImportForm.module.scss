@@ -367,6 +367,7 @@
 @media (max-width: 640px) {
     .inputGroup {
         flex-direction: column;
+        align-items: stretch;
     }
 
     .button {

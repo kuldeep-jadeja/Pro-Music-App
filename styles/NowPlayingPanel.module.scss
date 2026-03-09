@@ -3,7 +3,7 @@
 // ── Panel shell ───────────────────────────────────────────────
 .panel {
     position: fixed;
-    top: 8px;
+    top: 60px;
     right: 8px;
     bottom: calc(#{$player-height} + 24px);
     width: $panel-width;
