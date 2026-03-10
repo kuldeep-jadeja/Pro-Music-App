@@ -170,6 +170,134 @@ function parseEmbedTrack(t) {
     };
 }
 
+// ─── 3-tier metadata enrichment (mirrors lib/spotify.js) ───────────────────────
+//
+// Runs BEFORE upsert so new tracks are saved with full album + art data.
+// Tier 1 — iTunes Search API   (fast, concurrent, great mainstream coverage)
+//           Tries cleaned name first (strips feat./version), falls back to full name.
+// Tier 2 — MusicBrainz + CAA   (serialised at 1 req/s, last resort)
+//
+// NOTE: Spotify OG scrape was Tier 2 but Spotify moved to a full SPA so the
+//       HTML response no longer contains OG meta tags.  Removed.
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+/** Strip featured-artist suffixes and version tags that confuse search engines. */
+function cleanTrackName(name) {
+    return name
+        .replace(/\s*[\(\[](feat|ft|with|prod)[^\)\]]*[\)\]]/gi, '')
+        .replace(/\s*-\s*(radio|acoustic|live|demo|remix|remaster(?:ed)?|version|edit|extended|alt(?:ernate)?).*$/gi, '')
+        .replace(/\s*\([^)]*\)\s*$/, '') // trailing parenthetical
+        .trim();
+}
+
+async function fetchFromItunes(track) {
+    const MAX_RETRIES = 3;
+    const artist = track.artists?.[0] || '';
+    const cleanName = cleanTrackName(track.name);
+    // Try clean name first; fall back to full name so we never lose a hit
+    const queries = cleanName !== track.name
+        ? [`${artist} ${cleanName}`, `${artist} ${track.name}`]
+        : [`${artist} ${track.name}`];
+
+    for (const queryStr of queries) {
+        const url = `https://itunes.apple.com/search?term=${encodeURIComponent(queryStr)}&media=music&entity=song&limit=1&country=US`;
+        let attempt = 0;
+        while (attempt < MAX_RETRIES) {
+            try {
+                const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+                if (res.status === 403) {
+                    // Rate-limited by Apple — bail out entirely so we don't waste time
+                    console.warn('[chartsWorker] iTunes 403 — rate-limited, skipping iTunes tier');
+                    return false;
+                }
+                if (res.status === 429 || res.status >= 500) {
+                    await sleep(500 * Math.pow(2, attempt));
+                    attempt++;
+                    continue;
+                }
+                if (!res.ok) break; // non-retryable non-rate-limit error → try next query
+                const body = await res.text();
+                if (!body) break; // empty body (transient) → try next query
+                const json = JSON.parse(body);
+                const result = json.results?.[0];
+                if (!result) break; // no results for this query variant → try next
+                if (!track.album || track.album === 'Unknown Album')
+                    track.album = result.collectionName || track.album;
+                if (!track.albumImage && result.artworkUrl100)
+                    track.albumImage = result.artworkUrl100.replace('100x100bb', '600x600bb');
+                return !!(track.album && track.albumImage);
+            } catch (err) {
+                if (attempt < MAX_RETRIES - 1) await sleep(500 * Math.pow(2, attempt));
+                attempt++;
+            }
+        }
+    }
+    return false;
+}
+
+async function fetchFromMusicBrainz(track) {
+    const artist = track.artists?.[0] || '';
+    const query = encodeURIComponent(`recording:"${track.name}" AND artist:"${artist}"`);
+    const headers = { 'User-Agent': 'ProMusicApp/1.0 (https://github.com/pro-music-app)' };
+    try {
+        const res = await fetch(
+            `https://musicbrainz.org/ws/2/recording/?query=${query}&fmt=json&limit=10&inc=releases+release-groups`,
+            { signal: AbortSignal.timeout(12000), headers }
+        );
+        if (!res.ok) return false;
+        const json = await res.json();
+        let bestRelease = null;
+        for (const recording of json.recordings?.slice(0, 5) ?? []) {
+            const releases = recording.releases ?? [];
+            const candidate =
+                releases.find(r => r.status === 'Official' && r['release-group']?.['primary-type'] === 'Album' && !(r['release-group']?.['secondary-types'] ?? []).some(s => ['Live', 'Compilation', 'Soundtrack', 'Remix'].includes(s))) ||
+                releases.find(r => r.status === 'Official' && r['release-group']?.['primary-type'] === 'Album') ||
+                releases.find(r => r.status === 'Official') ||
+                releases[0];
+            if (candidate && candidate.status !== 'Bootleg') { bestRelease = candidate; break; }
+        }
+        if (!bestRelease) return false;
+        if (!track.album || track.album === 'Unknown Album') track.album = bestRelease.title || track.album;
+        if (!track.albumImage && bestRelease.id) {
+            try {
+                const caaRes = await fetch(`https://coverartarchive.org/release/${bestRelease.id}`, { signal: AbortSignal.timeout(8000), headers });
+                if (caaRes.ok) {
+                    const caaJson = await caaRes.json();
+                    const img = caaJson.images?.find(i => i.front) || caaJson.images?.[0];
+                    if (img) track.albumImage = img.thumbnails?.['500'] || img.thumbnails?.large || img.image || null;
+                }
+            } catch (_) { /* non-fatal */ }
+        }
+        return !!(track.album && track.albumImage);
+    } catch (err) {
+        console.warn(`[chartsWorker] MusicBrainz error for "${track.name}":`, err.message);
+        return false;
+    }
+}
+
+async function enrichTracks(tracks, tag) {
+    const needsWork = tracks.filter(t => !t.albumImage || !t.album || t.album === 'Unknown Album');
+    if (needsWork.length === 0) return;
+    console.log(`[${tag}] Enriching ${needsWork.length} track(s) missing album/image...`);
+
+    // Tier 1: iTunes (5 concurrent, 300 ms between batches)
+    for (let i = 0; i < needsWork.length; i += 5) {
+        await Promise.all(needsWork.slice(i, i + 5).map(fetchFromItunes));
+        if (i + 5 < needsWork.length) await sleep(300);
+    }
+
+    const afterItunes = needsWork.filter(t => !t.albumImage || !t.album || t.album === 'Unknown Album');
+    if (afterItunes.length === 0) { console.log(`[${tag}] iTunes resolved all.`); return; }
+    console.log(`[${tag}] iTunes missed ${afterItunes.length} — trying MusicBrainz...`);
+
+    // Tier 2: MusicBrainz (serialised, 1100 ms apart)
+    for (let i = 0; i < afterItunes.length; i++) {
+        await fetchFromMusicBrainz(afterItunes[i]);
+        if (i < afterItunes.length - 1) await sleep(1100);
+    }
+}
+
 // ─── Spotify playlist fetcher ─────────────────────────────────────────────────
 
 /**
@@ -269,27 +397,35 @@ async function run() {
         }
 
         console.log(`[chartsWorker] "${playlist.name}": ${tracks.length} tracks found`);
-
+        // Enrich tracks missing album/albumImage before saving
+        await enrichTracks(tracks, 'chartsWorker');
         for (const track of tracks) {
             if (trackCount >= MAX_TRACKS_PER_RUN) break;
 
             try {
                 const fingerprint = generateFingerprint(track.name, track.artists);
 
-                // Upsert — only set fields on first insert, never overwrite existing data
+                // Upsert — set core fields on first insert; also backfill album/albumImage
+                // on existing tracks that were inserted with Format A (no album/image data).
+                const setOnInsert = {
+                    name: track.name,
+                    artists: track.artists,
+                    album: track.album || 'Unknown Album',
+                    duration: track.duration,
+                    albumImage: track.albumImage,
+                    fingerprint,
+                    importedAt: new Date(),
+                };
+                // Only include in $set when we actually have real values to write
+                const backfill = {};
+                if (track.album) backfill.album = track.album;
+                if (track.albumImage) backfill.albumImage = track.albumImage;
+                const updateOp = Object.keys(backfill).length > 0
+                    ? { $setOnInsert: setOnInsert, $set: backfill }
+                    : { $setOnInsert: setOnInsert };
                 const existing = await Track.findOneAndUpdate(
                     { spotifyId: track.spotifyId },
-                    {
-                        $setOnInsert: {
-                            name: track.name,
-                            artists: track.artists,
-                            album: track.album || 'Unknown Album',
-                            duration: track.duration,
-                            albumImage: track.albumImage,
-                            fingerprint,
-                            importedAt: new Date(),
-                        },
-                    },
+                    updateOp,
                     { upsert: true, new: false }
                 );
 

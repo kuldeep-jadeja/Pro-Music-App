@@ -8,7 +8,11 @@
         "start": "next start -p 4072",
         "ytmatch:worker": "node --env-file=.env.local workers/ytMatchWorker.js",
         "populate:charts": "node workers/chartsWorker.js",
-        "crawl:artists": "node workers/artistCrawler.js"
+        "crawl:artists": "node workers/artistCrawler.js",
+        "repair:artists": "node scripts/repairEmptyArtists.js",
+        "repair:albums": "node scripts/repairAlbumImages.js",
+        "repair:all": "node scripts/repairMissingFields.js",
+        "db:status": "node scripts/dbStatus.js"
     },
     "dependencies": {
         "@ducanh2912/next-pwa": "^10.2.9",
