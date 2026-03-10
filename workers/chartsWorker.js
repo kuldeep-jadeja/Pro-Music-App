@@ -410,23 +410,30 @@ async function run() {
                 const setOnInsert = {
                     name: track.name,
                     artists: track.artists,
-                    album: track.album || 'Unknown Album',
                     duration: track.duration,
-                    albumImage: track.albumImage,
                     fingerprint,
                     importedAt: new Date(),
                 };
-                // Only include in $set when we actually have real values to write
+                // Only include in $set when we actually have real values to write;
+                // fields in $set must NOT also appear in $setOnInsert (MongoDB conflict).
                 const backfill = {};
-                if (track.album) backfill.album = track.album;
-                if (track.albumImage) backfill.albumImage = track.albumImage;
+                if (track.album) {
+                    backfill.album = track.album;
+                } else {
+                    setOnInsert.album = 'Unknown Album';
+                }
+                if (track.albumImage) {
+                    backfill.albumImage = track.albumImage;
+                } else {
+                    setOnInsert.albumImage = track.albumImage;
+                }
                 const updateOp = Object.keys(backfill).length > 0
                     ? { $setOnInsert: setOnInsert, $set: backfill }
                     : { $setOnInsert: setOnInsert };
                 const existing = await Track.findOneAndUpdate(
                     { spotifyId: track.spotifyId },
                     updateOp,
-                    { upsert: true, new: false }
+                    { upsert: true, returnDocument: 'before' }
                 );
 
                 if (!existing) {
