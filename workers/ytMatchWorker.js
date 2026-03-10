@@ -267,14 +267,26 @@ async function main() {
 
     const redis = new Redis(REDIS_URL, {
         retryStrategy(times) {
-            if (times >= 10) return null; // give up after 10 attempts
-            return Math.min(times * 500, 5000);
+            // Keep retrying indefinitely so the worker survives Redis restarts.
+            // Cap backoff at 30 s to avoid excessively long waits.
+            const delay = Math.min(times * 500, 30_000);
+            logWarn(`Redis disconnected — retry #${times} in ${delay}ms`);
+            return delay;
         },
         lazyConnect: false,
+        enableOfflineQueue: false, // reject commands immediately when disconnected
+        // so the while-loop sleeps instead of queuing
     });
 
-    redis.on('connect', () => devLog('Connected to Redis'));
+    let redisReady = false;
+    redis.on('connect', () => { redisReady = true; devLog('Connected to Redis'); });
+    redis.on('ready', () => { redisReady = true; });
+    redis.on('close', () => { redisReady = false; logWarn('Redis connection closed'); });
     redis.on('error', (e) => logError('Redis error', e));
+
+    // Prevent MongoDB connection-drop from crashing the process.
+    mongoose.connection.on('error', (e) => logError('MongoDB connection error', e));
+    mongoose.connection.on('disconnected', () => logWarn('MongoDB disconnected — will reconnect automatically'));
 
     devLog(`Watching queue: ${QUEUE_KEY}`);
     devLog('Max concurrency: 1 (single BLPOP consumer)');
@@ -283,6 +295,12 @@ async function main() {
     while (true) {
         let rawJob = null;
         try {
+            // Wait for Redis to be ready before issuing BLPOP.
+            if (!redisReady) {
+                await new Promise((r) => setTimeout(r, 2000));
+                continue;
+            }
+
             // BLPOP with a 5-second timeout keeps the loop responsive to
             // SIGTERM without busywaiting.  Returns null on timeout.
             const result = await redis.blpop(QUEUE_KEY, 5);
