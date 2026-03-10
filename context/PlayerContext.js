@@ -6,7 +6,7 @@ import {
     useCallback,
     useEffect,
 } from 'react';
-import { registerAudioUnlock } from '@/lib/unlockAudio';
+import { registerAudioUnlock, resumeSilentAudio } from '@/lib/unlockAudio';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PlayerContext — Global playback state & YouTube IFrame player management
@@ -82,9 +82,25 @@ export function PlayerProvider({ children }) {
         stopTimeTracking();
         intervalRef.current = setInterval(() => {
             if (playerRef.current?.getCurrentTime) {
-                setCurrentTime(playerRef.current.getCurrentTime());
+                const time = playerRef.current.getCurrentTime();
+                setCurrentTime(time);
+
+                // Keep lock-screen position state in sync while playing.
+                // This prevents iOS from dropping the media session.
+                if ('mediaSession' in navigator && navigator.mediaSession.metadata) {
+                    try {
+                        const dur = playerRef.current.getDuration?.() || 0;
+                        if (dur > 0) {
+                            navigator.mediaSession.setPositionState({
+                                duration: dur,
+                                playbackRate: 1,
+                                position: Math.min(time, dur),
+                            });
+                        }
+                    } catch { }
+                }
             }
-        }, 500);
+        }, 1000);
     }, [stopTimeTracking]);
 
     // Cleanup on unmount
@@ -125,6 +141,7 @@ export function PlayerProvider({ children }) {
                         if ('mediaSession' in navigator) {
                             navigator.mediaSession.setActionHandler('play', () => {
                                 playerRef.current?.playVideo();
+                                resumeSilentAudio();
                             });
                             navigator.mediaSession.setActionHandler('pause', () => {
                                 playerRef.current?.pauseVideo();
@@ -135,6 +152,25 @@ export function PlayerProvider({ children }) {
                             navigator.mediaSession.setActionHandler('previoustrack', () => {
                                 playPreviousRef.current?.();
                             });
+                            // seekbackward/seekforward keep iOS scrubber functional
+                            navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+                                const offset = details?.seekOffset || 10;
+                                const time = playerRef.current?.getCurrentTime?.() || 0;
+                                playerRef.current?.seekTo(Math.max(time - offset, 0), true);
+                            });
+                            navigator.mediaSession.setActionHandler('seekforward', (details) => {
+                                const offset = details?.seekOffset || 10;
+                                const time = playerRef.current?.getCurrentTime?.() || 0;
+                                const dur = playerRef.current?.getDuration?.() || 0;
+                                playerRef.current?.seekTo(Math.min(time + offset, dur), true);
+                            });
+                            try {
+                                navigator.mediaSession.setActionHandler('seekto', (details) => {
+                                    if (details?.seekTime != null) {
+                                        playerRef.current?.seekTo(details.seekTime, true);
+                                    }
+                                });
+                            } catch { /* seekto not supported in all browsers */ }
                         }
                     },
                     onStateChange: (event) => {
@@ -142,10 +178,27 @@ export function PlayerProvider({ children }) {
 
                         if (state === window.YT.PlayerState.PLAYING) {
                             setIsPlaying(true);
-                            setDuration(event.target.getDuration());
+                            const dur = event.target.getDuration();
+                            setDuration(dur);
                             startTimeTracking();
+
+                            // Keep iOS audio session alive in background
+                            resumeSilentAudio();
+
                             if ('mediaSession' in navigator) {
                                 navigator.mediaSession.playbackState = 'playing';
+                                // Position state keeps lock-screen scrubber in sync
+                                // and prevents iOS from assuming playback stopped.
+                                try {
+                                    navigator.mediaSession.setPositionState({
+                                        duration: dur || 0,
+                                        playbackRate: 1,
+                                        position: Math.min(
+                                            event.target.getCurrentTime?.() || 0,
+                                            dur || 0
+                                        ),
+                                    });
+                                } catch { }
                             }
                         } else if (state === window.YT.PlayerState.PAUSED) {
                             setIsPlaying(false);
@@ -270,22 +323,32 @@ export function PlayerProvider({ children }) {
         setIsLoading(false);
 
         if (videoId) {
-            play(videoId);
-
             // ── Media Session metadata ────────────────────────────
-            // Updates lockscreen / Bluetooth / car display with
-            // current track info every time a new track starts.
+            // Set metadata BEFORE play() — iOS reads it at the moment
+            // the audio session activates.  Setting it after loadVideoById
+            // is too late on some iOS versions.
             if ('mediaSession' in navigator) {
                 const artworkSrc = track.albumImage
                     || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
                 navigator.mediaSession.metadata = new MediaMetadata({
                     title: track.name,
                     artist: track.artists?.join(', ') || 'Unknown Artist',
+                    album: track.album || '',
                     artwork: [
+                        { src: artworkSrc, sizes: '96x96', type: 'image/jpeg' },
+                        { src: artworkSrc, sizes: '128x128', type: 'image/jpeg' },
+                        { src: artworkSrc, sizes: '192x192', type: 'image/jpeg' },
+                        { src: artworkSrc, sizes: '256x256', type: 'image/jpeg' },
+                        { src: artworkSrc, sizes: '384x384', type: 'image/jpeg' },
                         { src: artworkSrc, sizes: '512x512', type: 'image/jpeg' },
                     ],
                 });
             }
+
+            play(videoId);
+
+            // Keep the silent audio helper running for iOS background
+            resumeSilentAudio();
 
             // ── Prefetch optimisation ─────────────────────────────
             // While the current track plays, silently resolve the next

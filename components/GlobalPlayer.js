@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { usePlayer } from '@/context/PlayerContext';
 
 /**
@@ -60,6 +60,22 @@ export default function GlobalPlayer() {
             initPlayer('youtube-player');
         };
     }, [initPlayer]);
+
+    // Prevent iOS from suspending the page when it goes to background.
+    // A visibilitychange handler pokes the player to keep the audio
+    // session alive across app switches / lock.
+    const handleVisibilityChange = useCallback(() => {
+        if (typeof document === 'undefined') return;
+        if (document.visibilityState === 'hidden') {
+            // Page going to background — nothing to do; the silent audio
+            // loop in unlockAudio.js keeps the audio session alive.
+        }
+    }, []);
+
+    useEffect(() => {
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }, [handleVisibilityChange]);
 
     return (
         /*
