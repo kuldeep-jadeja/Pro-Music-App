@@ -1,303 +1,379 @@
-# Demus — Your Music, Your Way
+<div align="center">
 
-A full-stack music streaming Progressive Web App (PWA) built with Next.js. Users create an account, import their public Spotify playlists by URL, and play every track through the YouTube IFrame API — no Spotify subscription needed, no YouTube API quota consumed.
+# 🎵 Demus
 
----
+### *Your Music, Your Way*
 
-## Features
+**A full-stack music streaming PWA that turns any public Spotify playlist into an offline-capable, ad-free listening experience — powered by YouTube.**
 
-- **Account system** — email/password auth with JWT (HTTP-only cookies)
-- **Spotify playlist import** — paste any public Spotify playlist URL
-- **Zero-quota YouTube matching** — tracks matched to YouTube via `yt-search` scraping
-- **Persistent audio player** — hidden 1×1px YouTube IFrame survives page navigation
-- **Shuffle & Repeat** — off / all / one modes
-- **Now Playing panel** — upcoming 5-track queue (desktop)
-- **Mobile-first** — bottom tab bar + full-screen now playing sheet
-- **Background matching** — responds immediately; matching runs async with a global concurrency queue
-- **Resume paused matching** — rate-limited matches pause with `retryAfter`; resume on demand
-- **PWA** — installable, offline-capable via hand-written service worker
-- **Track deduplication** — global DB cache; identical tracks never re-matched
+<br/>
+
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react)](https://reactjs.org/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Mongoose-47A248?style=for-the-badge&logo=mongodb)](https://www.mongodb.com/)
+[![Redis](https://img.shields.io/badge/Redis-ioredis-DC382D?style=for-the-badge&logo=redis)](https://redis.io/)
+[![PWA](https://img.shields.io/badge/PWA-Ready-5A0FC8?style=for-the-badge&logo=pwa)](https://web.dev/progressive-web-apps/)
+
+</div>
 
 ---
 
-## Tech Stack
+## ✨ What Is Demus?
 
-| Layer | Technology |
-|---|---|
-| Framework | Next.js 16 (Pages Router) |
-| Styling | SCSS CSS Modules |
-| Animations | Framer Motion |
-| Icons | Lucide React |
-| Database | MongoDB + Mongoose 9 |
-| Auth | bcrypt 6 + jsonwebtoken 9 (HTTP-only cookie) |
-| Spotify data | `spotify-url-info` (public embed scraping — no API key) |
-| YouTube matching | `yt-search` (scraping — no API key / no quota) |
-| YouTube playback | YouTube IFrame API |
-| HTTP client | Axios |
-| PWA | Hand-written service worker (`public/sw.js`) |
+Demus lets you paste any **public Spotify playlist URL** and instantly stream every track — **completely free, no Spotify Premium required, no API keys**.
+
+- 🎧 **Import** — Paste a Spotify playlist URL. Tracks are scraped without any developer credentials.
+- 🔍 **Match** — Each track is automatically matched to its YouTube video using a smart scoring algorithm.
+- ▶️ **Stream** — Music plays directly from YouTube's IFrame API. No audio is proxied through our servers.
+- 📱 **Install** — Works as a PWA on mobile and desktop. Full offline support via service worker.
 
 ---
 
-## Prerequisites
+## 🏗️ Architecture Overview
 
-- **Node.js 18+**
-- **MongoDB** (local or Atlas)
-- **No external API keys required**
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Browser (PWA)                            │
+│  ┌──────────┐  ┌──────────────┐  ┌───────────────────────────┐  │
+│  │ AppContext│  │PlayerContext │  │  GlobalPlayer (YT IFrame) │  │
+│  └──────────┘  └──────────────┘  └───────────────────────────┘  │
+└────────────────────────────┬────────────────────────────────────┘
+                             │ HTTP / JSON
+┌────────────────────────────▼────────────────────────────────────┐
+│                    Next.js 16 (Pages Router)                     │
+│  /api/import-playlist  /api/auth/*  /api/stream/*  /api/...     │
+└───────────┬────────────────────────────────────┬────────────────┘
+            │                                    │
+  ┌─────────▼──────────┐             ┌──────────▼─────────┐
+  │      MongoDB        │             │       Redis         │
+  │  (source of truth)  │             │  (queue + cache)   │
+  │  Users, Playlists   │             │  demus:ytmatch:     │
+  │  Tracks, Progress   │             │  queue (BLPOP)     │
+  └─────────────────────┘             └──────────┬─────────┘
+                                                 │ BLPOP
+                                      ┌──────────▼─────────┐
+                                      │   ytMatchWorker     │
+                                      │  (standalone Node)  │
+                                      │  yt-search scrape   │
+                                      │  max 1 in-flight    │
+                                      └─────────────────────┘
+```
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
+
+### Prerequisites
+
+| Tool      | Version  |
+| --------- | -------- |
+| Node.js   | ≥ 20.6   |
+| MongoDB   | ≥ 6      |
+| Redis     | ≥ 7 *(optional)* |
+
+### 1. Clone & Install
 
 ```bash
-# 1. Clone and install
-git clone https://github.com/your-user/pro-music-app.git
-cd pro-music-app
+git clone <repo-url>
+cd Pro-Music-App
 npm install
-
-# 2. Configure environment variables
-cp .env.example .env.local
-# Edit .env.local — see Environment Variables section below
-
-# 3. Run in development
-npm run dev
-
-# 4. Open
-http://localhost:3000
 ```
 
----
+### 2. Configure Environment
 
-## Environment Variables
-
-Create a `.env.local` file in the project root:
+Create `.env.local` in the project root:
 
 ```env
-# MongoDB connection string (required)
-MONGODB_URI=mongodb://localhost:27017/pro-music-app
+# Required
+MONGODB_URI=mongodb://localhost:27017/demus
+JWT_SECRET=your-super-secret-min-32-chars-key
 
-# JWT secret — use a long random string (required)
-JWT_SECRET=your-super-secret-jwt-key-at-least-32-chars
+# Optional — app works without Redis, but matching performance improves with it
+REDIS_URL=redis://localhost:6379
 ```
 
-> **That's it.** Spotify scraping and yt-search require no API keys.
+> **No Spotify or YouTube API keys needed.** Demus uses public scraping only.
 
----
+### 3. Start the App
 
-## Architecture Overview
+```bash
+# Development server (with Turbopack)
+npm run dev
 
+# Production
+npm run build && npm start       # runs on port 4072
 ```
-User browser
-  │
-  ├── Next.js Pages (pages/)
-  │     ├── / — Home (quick picks, playlist grid, import form)
-  │     ├── /signup — Registration
-  │     └── /playlist/[id] — Playlist detail with track list
-  │
-  ├── API Routes (pages/api/)
-  │     ├── auth/signup, login, logout, me  ← JWT cookie auth
-  │     ├── import-playlist                 ← Full import pipeline
-  │     ├── playlists                       ← User's playlist list
-  │     ├── playlist/[id]                   ← Playlist + tracks
-  │     ├── playlist/[id]/status            ← Lightweight polling
-  │     ├── youtube-match                   ← Resume paused matching
-  │     ├── match-youtube                   ← Single-track match
-  │     ├── repair-enrichment               ← Album art repair
-  │     └── stream/[trackId]               ← Return YouTube video ID
-  │
-  └── External Services
-        ├── spotify-url-info  (Spotify embed scrape — no auth)
-        ├── iTunes Search API (album art enrichment — no auth)
-        └── yt-search         (YouTube scrape — no auth)
+
+### 4. Start the YouTube Match Worker *(recommended)*
+
+The worker is a separate Node process that processes YouTube matching jobs from the Redis queue. Without it, single-track fallback matching still works but batch matching won't complete.
+
+```bash
+npm run ytmatch:worker
 ```
 
 ---
 
-## How It Works
+## 🔄 How It Works — The Import Pipeline
 
-### 1. Authentication
-
-Users register with email + password. Passwords are bcrypt-hashed (12 rounds). On login, a 7-day JWT is set as an HTTP-only cookie. All playlist/import API routes require a valid JWT.
-
-### 2. Playlist Import
-
-1. User pastes a public Spotify playlist URL
-2. `spotify-url-info` scrapes the public embed page — no Spotify API key required
-3. Tracks are bulk-upserted into MongoDB (by `spotifyId`) — existing track metadata refreshed, `youtubeVideoId` never overwritten
-4. API responds immediately with playlist data
-5. Background task matches unmatched tracks through `yt-search` via a **global concurrency queue** — at most one search in-flight at a time, with 1s delay + jitter between calls
-
-### 3. YouTube Matching
-
-Each track is scored against yt-search results:
-
-| Signal | Score |
-|---|---|
-| Duration within ±15 seconds | +10 |
-| "official audio" / "official music" | +5 |
-| "official" in title | +2 |
-| Author contains vevo/official | +3 |
-| "cover" in title | −5 |
-| "remix" (not in track name) | −5 |
-| "live" (not in track name) | −3 |
-| "karaoke" or "instrumental" | −8 |
-
-If yt-search returns a rate-limit error, the playlist is paused with a `retryAfter` timestamp. The user can resume matching via the playlist detail page.
-
-### 4. Playback
-
-A persistent 1×1px hidden YouTube IFrame is mounted once in `_app.js` and never unmounted. Navigation does not interrupt audio. `PlayerContext` manages the queue, shuffle, repeat, and time state. iOS Safari audio is unlocked on the first user gesture.
-
-### 5. Progress Polling
-
-While matching, the frontend polls `GET /api/playlist/[id]/status` every 3 seconds (lightweight — no track populate). When status reaches `'ready'`, the full playlist is fetched.
+```
+User pastes Spotify URL
+        ↓
+1. Extract playlist ID (URL, URI, or raw ID)
+2. Scrape public Spotify embed page — no API key
+3. Upsert tracks to MongoDB (global shared cache)
+4. Identify unmatched tracks (no youtubeVideoId)
+5. Respond to client immediately ← fast!
+        ↓  (fire-and-forget)
+6. Enqueue yt-search jobs to Redis
+7. ytMatchWorker processes jobs 1-by-1 with jitter delay
+8. Scores each YouTube result (duration, official, vevo, etc.)
+9. Writes youtubeVideoId to Track document
+10. Updates playlist progress (0→100%)
+        ↓  (also fire-and-forget)
+11. 3-tier metadata enrichment (album art, names):
+    • Tier 1: iTunes Search API   (5 concurrent)
+    • Tier 2: Spotify OG scrape   (3 concurrent)
+    • Tier 3: MusicBrainz + CAA   (serialised, 1 req/s)
+```
 
 ---
 
-## Project Structure
+## 📦 Tech Stack
+
+| Layer          | Technology                          | Why                                                      |
+| -------------- | ----------------------------------- | -------------------------------------------------------- |
+| Framework      | Next.js 16 (Pages Router)           | SSR, API routes, PWA-friendly                            |
+| UI             | React 19 + Framer Motion            | Fluid animations, context-driven state                   |
+| Styling        | SCSS CSS Modules                    | Scoped styles, design tokens, no Tailwind bloat          |
+| Database       | MongoDB + Mongoose                  | Flexible schema for track/playlist data                  |
+| Cache & Queue  | Redis (ioredis)                     | Optional — rate limiting + yt-search job queue           |
+| Auth           | JWT (HTTP-only cookie)              | Stateless, secure, no session storage in Redis           |
+| Music Data     | `spotify-url-info` (scraping)       | Zero API keys — uses Spotify's public embed page         |
+| YouTube Search | `yt-search` (scraping)              | Zero quota — bypasses YouTube Data API entirely          |
+| Playback       | YouTube IFrame API                  | Browser-native, free, no audio proxying                  |
+| Icons          | Lucide React                        | Lightweight, tree-shakeable                              |
+| PWA            | Hand-written Service Worker         | Avoids Turbopack/next-pwa conflicts                      |
+
+---
+
+## 📁 Project Structure
 
 ```
+Pro-Music-App/
 ├── pages/
-│   ├── _app.js              # Providers, GlobalPlayer, SW registration
-│   ├── _document.js         # HTML shell
-│   ├── index.js             # Home page
-│   ├── signup.js            # Registration page
-│   ├── playlist/[id].js     # Playlist detail
-│   └── api/                 # API routes (see route map above)
+│   ├── _app.js              # App shell, SW registration, GlobalPlayer
+│   ├── _document.js         # Custom HTML doc (YT IFrame API script load)
+│   ├── index.js             # Home page: QuickPicks + playlist grid
+│   ├── login.js             # Login page
+│   ├── signup.js            # Signup page
+│   ├── playlist/[id].js     # Playlist detail with TrackList
+│   └── api/
+│       ├── auth/            # signup, login, logout, me
+│       ├── import-playlist.js
+│       ├── playlists.js
+│       ├── playlist/[id]/   # index (full), status (polling)
+│       ├── stream/[trackId].js
+│       ├── youtube-match.js
+│       ├── match-youtube.js
+│       └── repair-enrichment.js
 │
 ├── components/
-│   ├── layout/
-│   │   ├── AppLayout.js     # Full shell (sidebar, navbar, player, panels)
-│   │   ├── Sidebar.js
-│   │   ├── Navbar.js
-│   │   ├── NowPlayingPanel.js
-│   │   ├── MobileTabBar.js
-│   │   └── MobileNowPlayingSheet.js
-│   ├── GlobalPlayer.js      # Hidden persistent YouTube iframe
+│   ├── layout/              # AppLayout, Sidebar, Navbar, NowPlayingPanel,
+│   │                        # MobileTabBar, MobileNowPlayingSheet
 │   ├── Player.js            # Bottom player bar
+│   ├── GlobalPlayer.js      # Persistent hidden YouTube iframe
 │   ├── ImportForm.js
 │   ├── TrackList.js
-│   ├── PlaylistCard.js
-│   ├── PlaylistGrid.js
-│   ├── PlaylistHeader.js
+│   ├── PlaylistCard.js / PlaylistGrid.js / PlaylistHeader.js
 │   ├── QuickPicks.js
 │   ├── MatchProgressBar.js
 │   └── Spinner.js
 │
 ├── lib/
 │   ├── mongodb.js           # Mongoose singleton
+│   ├── redis.js             # ioredis singleton (optional)
+│   ├── redisQueue.js        # RPUSH to demus:ytmatch:queue
 │   ├── auth.js              # JWT sign/verify
-│   ├── requireAuth.js       # Auth guard HOF
-│   ├── rateLimit.js         # In-memory rate limiter
-│   ├── spotify.js           # Spotify scraping + iTunes enrichment
-│   ├── youtube.js           # yt-search + global concurrency queue
-│   ├── youtubeMatcher.js    # Standalone single-track matcher
-│   ├── trackFingerprint.js  # Track deduplication normalization
+│   ├── requireAuth.js       # HOF route guard
+│   ├── rateLimit.js         # sliding-window rate limiter
+│   ├── redisRateLimit.js    # Redis-backed limiter
+│   ├── spotify.js           # Scraping + 3-tier enrichment
+│   ├── youtube.js           # enqueue(), searchYouTubeTrack(), batchMatchTracks()
+│   ├── youtubeMatcher.js    # Lightweight single-track matcher
+│   ├── trackFingerprint.js  # Dedup normalization
 │   ├── unlockAudio.js       # iOS Safari audio unlock
-│   └── AppContext.js        # Auth + playlist React context
+│   └── AppContext.js        # Auth, playlists, import tracking
 │
 ├── context/
-│   └── PlayerContext.js     # YouTube player state
+│   └── PlayerContext.js     # YT player state & controls
 │
 ├── models/
-│   ├── User.js
-│   ├── Track.js
-│   └── Playlist.js
+│   ├── User.js              # email, passwordHash
+│   ├── Track.js             # spotifyId, youtubeVideoId, fingerprint, ...
+│   └── Playlist.js          # user, tracks[], status, importProgress, ...
 │
-├── styles/                  # SCSS CSS Modules + variables
+├── workers/
+│   ├── ytMatchWorker.js     # Standalone BLPOP consumer (npm run ytmatch:worker)
+│   ├── chartsWorker.js      # Chart playlist populator
+│   └── artistCrawler.js     # Artist metadata crawler
+│
+├── scripts/
+│   ├── repairEmptyArtists.js
+│   ├── repairAlbumImages.js
+│   ├── repairMissingFields.js
+│   └── dbStatus.js
+│
+├── styles/
+│   ├── _variables.scss      # Design tokens (colors, spacing, etc.)
+│   ├── globals.scss         # Global resets
+│   └── *.module.scss        # Per-component CSS modules
+│
 └── public/
-    ├── sw.js                # Service worker
     ├── manifest.json        # PWA manifest
+    ├── sw.js                # Hand-written service worker
     └── offline.html         # Offline fallback
 ```
 
 ---
 
-## Data Models
+## 🔐 API Reference
+
+| Endpoint                          | Method | Auth | Rate Limit | Description                          |
+| --------------------------------- | ------ | ---- | ---------- | ------------------------------------ |
+| `/api/auth/signup`                | POST   | —    | 5/min      | Register a new account               |
+| `/api/auth/login`                 | POST   | —    | 10/min     | Authenticate and receive JWT cookie  |
+| `/api/auth/logout`                | POST   | —    | —          | Clear auth cookie                    |
+| `/api/auth/me`                    | GET    | —    | —          | Get current user from cookie         |
+| `/api/import-playlist`            | POST   | ✅   | 10/min     | Import a Spotify playlist            |
+| `/api/playlists`                  | GET    | ✅   | —          | List user's playlists                |
+| `/api/playlist/[id]`              | GET    | ✅   | —          | Fetch playlist with populated tracks |
+| `/api/playlist/[id]/status`       | GET    | ✅   | —          | Poll matching progress               |
+| `/api/stream/[trackId]`           | GET    | —    | —          | Get YouTube video ID for a track     |
+| `/api/youtube-match`              | POST   | ✅   | 20/min     | Resume a paused playlist             |
+| `/api/match-youtube`              | POST   | —    | —          | Single-track YouTube match           |
+| `/api/repair-enrichment`          | POST   | ✅   | wrapped    | Re-run metadata enrichment           |
+
+---
+
+## 🎯 YouTube Matching — Scoring Algorithm
+
+Every YouTube result is scored before selection:
+
+| Signal                                       | Score |
+| -------------------------------------------- | :---: |
+| Duration within ±15 seconds of Spotify track | **+10** |
+| "official audio" or "official music" in title | **+5** |
+| "official" in title                          | **+2** |
+| VEVO or "official" channel name              | **+3** |
+| "cover" in title                             | **−5** |
+| "remix" (when track isn't a remix)           | **−5** |
+| "live" (when track isn't live)               | **−3** |
+| "karaoke" or "instrumental"                  | **−8** |
+
+Falls back to the first result when all scores are ≤ 0.
+
+---
+
+## 🗄️ Database Schema
 
 ### User
+```
+email (unique, lowercase) | passwordHash (never returned in API) | createdAt
+```
 
-| Field | Type | Notes |
-|---|---|---|
-| `email` | String | Unique, lowercase, indexed |
-| `passwordHash` | String | bcrypt — excluded from all JSON responses |
-| `createdAt` | Date | Auto-set |
-
-### Track (Global Cache)
-
-| Field | Type | Notes |
-|---|---|---|
-| `spotifyId` | String | Unique index |
-| `name` | String | |
-| `artists` | String[] | |
-| `album` | String | |
-| `duration` | Number | Milliseconds |
-| `albumImage` | String | URL |
-| `youtubeVideoId` | String | Null until matched |
-| `importedAt` | Date | Set once on insert |
+### Track *(global cache shared across all users)*
+```
+spotifyId (unique) | name | artists[] | album | albumImage | duration (ms)
+youtubeVideoId     | fingerprint       | importedAt
+```
 
 ### Playlist
+```
+user (ref) | spotifyPlaylistId | name | description | coverImage | owner
+tracks[]   | trackCount        | status | importProgress | retryAfter
+pausedAt   | errorMessage
+```
 
-| Field | Type | Notes |
-|---|---|---|
-| `user` | ObjectId | Ref User — required; scopes ownership |
-| `spotifyPlaylistId` | String | Compound unique key with `user` |
-| `name`, `description`, `coverImage`, `owner` | String | Spotify metadata |
-| `tracks` | ObjectId[] | Refs to Track |
-| `trackCount` | Number | Total tracks in playlist |
-| `status` | String | `'imported' | 'matching' | 'ready' | 'paused' | 'error'` |
-| `importProgress` | Number | 0–100 |
-| `retryAfter` | Date | Set when paused due to rate limiting |
-| `pausedAt` | Date | Timestamp when matching was paused |
-| `errorMessage` | String | Human-readable error |
+**Playlist status lifecycle:**
 
----
-
-## API Reference
-
-| Endpoint | Method | Auth | Description |
-|---|---|---|---|
-| `/api/auth/signup` | POST | — | Create account |
-| `/api/auth/login` | POST | — | Login, sets JWT cookie |
-| `/api/auth/logout` | POST | — | Clear auth cookie |
-| `/api/auth/me` | GET | — | Return current user (or 401) |
-| `/api/import-playlist` | POST | JWT | Import playlist by Spotify URL |
-| `/api/playlists` | GET | JWT | List user's playlists |
-| `/api/playlist/[id]` | GET | JWT | Playlist + populated tracks |
-| `/api/playlist/[id]/status` | GET | JWT | Lightweight status polling |
-| `/api/stream/[trackId]` | GET | — | Get YouTube video ID for a track |
-| `/api/youtube-match` | POST | JWT | Resume paused matching |
-| `/api/match-youtube` | POST | — | Single-track match (client-triggered) |
-| `/api/repair-enrichment` | POST | JWT | Repair tracks missing album art |
+```
+imported ──► matching ──► ready
+                │
+                └──► paused ──► matching (on resume)
+                │
+                └──► error
+```
 
 ---
 
-## PWA
+## 🛠️ Utility Scripts
 
-The app is installable as a standalone PWA on desktop and mobile.
+```bash
+npm run ytmatch:worker    # Start YouTube match worker (keep running!)
+npm run populate:charts   # Populate chart playlists
+npm run crawl:artists     # Crawl & enrich artist metadata
 
-- **Manifest**: `public/manifest.json` — name, icons, theme `#7c5cff`, background `#0b0b0f`
-- **Service worker**: `public/sw.js` — hand-written to avoid Next.js build conflicts
-- **Offline fallback**: `public/offline.html`
+npm run repair:artists    # Fix tracks with empty artist data
+npm run repair:albums     # Fix tracks missing album art
+npm run repair:all        # Run all repair passes
 
-Caching strategy:
-- `/_next/static/**` — cache-first
-- HTML pages — network-first → cached → offline.html
-- `/api/**` — network-only
-- CDN images — stale-while-revalidate
-
----
-
-## Scripts
-
-| Command | Description |
-|---|---|
-| `npm run dev` | Development server on port 3000 |
-| `npm run build` | Production build |
-| `npm start` | Production server on port **4072** |
-| `npm run lint` | ESLint |
+npm run db:status         # Print DB stats (tracks, playlists, unmatched)
+```
 
 ---
 
-## License
+## 📱 PWA Features
 
-MIT
+Demus is fully installable as a Progressive Web App:
+
+- **Offline support** — Cached pages and assets served when disconnected.
+- **Standalone mode** — Launches without browser chrome, feels native.
+- **Service worker strategies:**
+  - Static assets → Cache-first
+  - HTML pages → Network-first → Cache → Offline fallback
+  - `/api/**` → Network-only (never stale)
+  - CDN images → Stale-while-revalidate
+
+---
+
+## 🔒 Security Notes
+
+- Passwords are hashed with **bcrypt (12 rounds)**
+- JWTs are stored in **HTTP-only cookies** (not localStorage — XSS-safe)
+- All sensitive endpoints are **rate-limited** via Redis or in-memory sliding window
+- Playlist queries are **scoped to the authenticated user** — no cross-user data leakage
+- No Spotify or YouTube API tokens stored anywhere
+
+---
+
+## ⚠️ Important Constraints
+
+| Constraint | Reason |
+| ---------- | ------ |
+| No `googleapis` | yt-search scraping bypasses the 10,000-unit/day YouTube quota |
+| No `ytdl-core` | Audio is not proxied — YouTube IFrame streams directly |
+| No Spotify OAuth | All data scraped from Spotify's public embed page |
+| Redis is optional | App degrades gracefully — MongoDB remains source of truth |
+| Pages Router only | No App Router, no `"use client"`, no `"use server"` |
+
+---
+
+## 🧩 Contributing & Development Notes
+
+- Path alias `@/` maps to project root (configured in `jsconfig.json`)
+- **Never** use relative `../../` imports — always use `@/`
+- SCSS design tokens live in `styles/_variables.scss` — never hardcode hex values
+- Every API handler must call `await connectDB()` at the top
+- The YouTube scoring logic in `lib/youtube.js` and `workers/ytMatchWorker.js` **must stay in sync**
+- See [`AGENT.md`](AGENT.md) for the full technical reference and architectural constraints
+
+---
+
+<div align="center">
+
+Made with 🎶 by Kuldeep Jadeja
+
+*No API keys. No premium. Just music.*
+
+</div>

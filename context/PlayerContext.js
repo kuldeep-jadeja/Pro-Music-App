@@ -62,6 +62,7 @@ export function PlayerProvider({ children }) {
     const shuffledOrderRef = useRef([]); // array of queue indices in shuffled order
     const shufflePositionRef = useRef(0); // current position in shuffledOrderRef
     const playNextRef = useRef(null); // populated after playNext is defined
+    const playPreviousRef = useRef(null); // populated after playPrevious is defined
 
     useEffect(() => { queueRef.current = queue; }, [queue]);
     useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
@@ -117,6 +118,24 @@ export function PlayerProvider({ children }) {
                         // Register the iOS audio-unlock handler now that the
                         // player exists.  It fires on the first user gesture.
                         registerAudioUnlock(() => playerRef.current);
+
+                        // ── Media Session action handlers ──────────────────
+                        // Registered ONCE here so they are never duplicated.
+                        // Use refs to always call the latest playNext/playPrevious.
+                        if ('mediaSession' in navigator) {
+                            navigator.mediaSession.setActionHandler('play', () => {
+                                playerRef.current?.playVideo();
+                            });
+                            navigator.mediaSession.setActionHandler('pause', () => {
+                                playerRef.current?.pauseVideo();
+                            });
+                            navigator.mediaSession.setActionHandler('nexttrack', () => {
+                                playNextRef.current?.();
+                            });
+                            navigator.mediaSession.setActionHandler('previoustrack', () => {
+                                playPreviousRef.current?.();
+                            });
+                        }
                     },
                     onStateChange: (event) => {
                         const state = event.data;
@@ -125,9 +144,15 @@ export function PlayerProvider({ children }) {
                             setIsPlaying(true);
                             setDuration(event.target.getDuration());
                             startTimeTracking();
+                            if ('mediaSession' in navigator) {
+                                navigator.mediaSession.playbackState = 'playing';
+                            }
                         } else if (state === window.YT.PlayerState.PAUSED) {
                             setIsPlaying(false);
                             stopTimeTracking();
+                            if ('mediaSession' in navigator) {
+                                navigator.mediaSession.playbackState = 'paused';
+                            }
                         } else if (
                             state === window.YT.PlayerState.ENDED &&
                             playerRef.current?.getCurrentTime() > 2
@@ -246,6 +271,21 @@ export function PlayerProvider({ children }) {
 
         if (videoId) {
             play(videoId);
+
+            // ── Media Session metadata ────────────────────────────
+            // Updates lockscreen / Bluetooth / car display with
+            // current track info every time a new track starts.
+            if ('mediaSession' in navigator) {
+                const artworkSrc = track.albumImage
+                    || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: track.name,
+                    artist: track.artists?.join(', ') || 'Unknown Artist',
+                    artwork: [
+                        { src: artworkSrc, sizes: '512x512', type: 'image/jpeg' },
+                    ],
+                });
+            }
 
             // ── Prefetch optimisation ─────────────────────────────
             // While the current track plays, silently resolve the next
@@ -377,6 +417,7 @@ export function PlayerProvider({ children }) {
 
     // Keep ref in sync so the YT onStateChange closure can call the latest version
     useEffect(() => { playNextRef.current = playNext; }, [playNext]);
+    useEffect(() => { playPreviousRef.current = playPrevious; }, [playPrevious]);
 
     // ── Public queue setter ───────────────────────────────────────────────
     const setQueue = useCallback((tracks) => {
