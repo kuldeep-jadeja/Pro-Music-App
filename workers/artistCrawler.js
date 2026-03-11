@@ -171,14 +171,20 @@ function parseEmbedTrack(t) {
  * Fetch album.id (and optionally artist IDs) for a given track spotifyId.
  * Uses getData on https://open.spotify.com/track/{id}.
  *
+ * NOTE: spotify-url-info v3.x no longer returns album.id for track URLs.
+ * The response omits the `album` field entirely. Artist IDs are only available
+ * via artists[].uri = "spotify:artist:ID".  albumId will always be null with
+ * the current API shape — callers should fall back to artist-based expansion.
+ *
  * @returns {{ albumId: string|null, artistSpotifyIds: string[] }}
  */
 async function getTrackExpansionData(spotifyId, getData) {
     try {
         const data = await getData(`https://open.spotify.com/track/${spotifyId}`);
+        // v3.x: album field is absent; artists have .uri but not .id
         const albumId = data.album?.id || null;
         const artistSpotifyIds = (data.artists || [])
-            .map(a => a.id)
+            .map(a => a.id || a.uri?.split(':').pop() || null)
             .filter(Boolean);
         return { albumId, artistSpotifyIds };
     } catch (err) {
@@ -215,6 +221,33 @@ async function fetchAlbumTracks(albumId, getData) {
     }
 
     return tracks;
+}
+
+/**
+ * Fetch an artist's top tracks from their Spotify artist page.
+ * spotify-url-info v3 returns a trackList (embed format) for artist URLs.
+ * Falls back to tracks.items if the API-like format is returned instead.
+ *
+ * @returns {object[]} Parsed track array
+ */
+async function fetchArtistTracks(artistId, getData) {
+    const url = `https://open.spotify.com/artist/${artistId}`;
+    try {
+        const data = await getData(url);
+        // Format A: modern embed trackList (typical for artist pages)
+        if (data.trackList && Array.isArray(data.trackList)) {
+            return data.trackList.map(parseEmbedTrack).filter(Boolean);
+        }
+        // Format B: API-like structure (fallback)
+        if (data.tracks?.items && Array.isArray(data.tracks.items)) {
+            return data.tracks.items
+                .map(item => parseApiTrack(item.track || item))
+                .filter(Boolean);
+        }
+    } catch (err) {
+        console.warn(`[artistCrawler] Failed to fetch artist tracks for ${artistId}:`, err.message);
+    }
+    return [];
 }
 
 // ─── 3-tier metadata enrichment (mirrors lib/spotify.js) ───────────────────────
@@ -461,17 +494,30 @@ async function run() {
 
         console.log(`[artistCrawler] Expanding artist: "${artistName}" via seed "${seedTrack.name}"`);
 
-        // Fetch album ID from the seed track's Spotify page
-        const { albumId } = await getTrackExpansionData(seedTrack.spotifyId, getData);
+        // Fetch album ID and artist IDs from the seed track's Spotify page
+        const { albumId, artistSpotifyIds } = await getTrackExpansionData(seedTrack.spotifyId, getData);
 
-        if (!albumId) {
-            console.warn(`[artistCrawler] Could not resolve album for "${artistName}" — skipping`);
+        let albumTracks = [];
+
+        if (albumId) {
+            // Original path: album-based expansion
+            albumTracks = await fetchAlbumTracks(albumId, getData);
+            console.log(`[artistCrawler] Album (${albumId}): ${albumTracks.length} tracks found for "${artistName}"`);
+        } else if (artistSpotifyIds.length > 0) {
+            // Fallback: artist top-tracks expansion (spotify-url-info v3 no longer
+            // returns album.id for track URLs, so we expand via artist page instead)
+            const artistSpotifyId = artistSpotifyIds[0];
+            albumTracks = await fetchArtistTracks(artistSpotifyId, getData);
+            console.log(`[artistCrawler] Artist (${artistSpotifyId}): ${albumTracks.length} top tracks found for "${artistName}"`);
+        } else {
+            console.warn(`[artistCrawler] Could not resolve album or artist ID for "${artistName}" — skipping`);
             continue;
         }
 
-        // Fetch all tracks from that album
-        const albumTracks = await fetchAlbumTracks(albumId, getData);
-        console.log(`[artistCrawler] Album (${albumId}): ${albumTracks.length} tracks found for "${artistName}"`);
+        if (albumTracks.length === 0) {
+            console.warn(`[artistCrawler] No tracks found for "${artistName}" — skipping`);
+            continue;
+        }
 
         // Enrich tracks missing album/albumImage before saving
         await enrichTracks(albumTracks, 'artistCrawler');
