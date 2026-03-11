@@ -9,24 +9,25 @@ import {
 import { registerAudioUnlock, resumeSilentAudio } from '@/lib/unlockAudio';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PlayerContext — Global playback state & YouTube IFrame player management
+// PlayerContext — Dual-player architecture for background-safe playback
 //
 // Architecture:
-//   • A single YT.Player instance is created ONCE (in GlobalPlayer) and
-//     reused across all tracks via player.loadVideoById().
-//   • The iframe is NEVER destroyed/recreated when navigating pages because
-//     the provider is mounted in _app.js.
-//   • iOS Safari requires the iframe to remain in the DOM with non-zero
-//     dimensions (opacity:0, 1×1px, position:absolute) — see GlobalPlayer.
-//   • An "audio unlock" handler (lib/unlockAudio.js) runs on the first user
-//     interaction to satisfy iOS's user-gesture requirement for media playback.
+//   • PRIMARY: HTML5 <audio> element loaded with direct audio URLs extracted
+//     server-side via /api/audio-url/[videoId]. This supports background
+//     playback on iOS (lock screen) and Android (minimise) natively.
+//   • FALLBACK: YT.Player IFrame — used if audio URL extraction fails.
+//     Works for foreground playback only.
+//   • The active player is tracked by `activePlayerRef` ('audio' | 'youtube').
+//   • Media Session API controls (lock screen) work with both players.
+//   • The <audio> element is created in GlobalPlayer and passed via
+//     `setAudioElement()`.
 //
 // Exposed API:
 //   State:   queue, currentIndex, currentTrack, isPlaying, currentTime,
-//            duration, volume, isReady, isLoading
+//            duration, volume, isReady, isLoading, activePlayer
 //   Actions: play(videoId), playTrack(track, index, queue?), togglePlay(),
 //            seek(seconds), setVolume(val), playNext(), playPrevious(),
-//            setQueue(tracks), initPlayer(containerId),
+//            setQueue(tracks), initPlayer(containerId), setAudioElement(el),
 //            toggleShuffle(), cycleRepeat()
 //   Modes:   isShuffleOn (bool), repeatMode ('off'|'all'|'one')
 // ─────────────────────────────────────────────────────────────────────────────
@@ -34,8 +35,10 @@ import { registerAudioUnlock, resumeSilentAudio } from '@/lib/unlockAudio';
 const PlayerContext = createContext(null);
 
 export function PlayerProvider({ children }) {
-    const playerRef = useRef(null);
+    const playerRef = useRef(null);       // YT.Player instance (fallback)
+    const audioElRef = useRef(null);      // HTML5 <audio> element (primary)
     const intervalRef = useRef(null);
+    const activePlayerRef = useRef(null); // 'audio' | 'youtube' | null
 
     // ── Playback state ────────────────────────────────────────────────────
     const [queue, setQueueState] = useState([]);
@@ -49,27 +52,30 @@ export function PlayerProvider({ children }) {
     const [isLoading, setIsLoading] = useState(false);
     const [isShuffleOn, setIsShuffleOn] = useState(false);
     const [repeatMode, setRepeatMode] = useState('off'); // 'off' | 'all' | 'one'
+    const [activePlayer, setActivePlayer] = useState(null); // 'audio' | 'youtube'
 
     // ── Refs for stale-closure prevention ─────────────────────────────────
-    // The YT.Player callbacks (onStateChange, onError) are bound once at
-    // creation time.  Reading state directly inside those closures would
-    // capture stale values.  Refs always reflect the latest state.
     const queueRef = useRef(queue);
     const currentIndexRef = useRef(currentIndex);
     const volumeRef = useRef(volume);
     const isShuffleOnRef = useRef(false);
     const repeatModeRef = useRef('off');
-    const shuffledOrderRef = useRef([]); // array of queue indices in shuffled order
-    const shufflePositionRef = useRef(0); // current position in shuffledOrderRef
-    const playNextRef = useRef(null); // populated after playNext is defined
-    const playPreviousRef = useRef(null); // populated after playPrevious is defined
-    const wasPlayingRef = useRef(false); // true if player was playing before page went hidden
+    const shuffledOrderRef = useRef([]);
+    const shufflePositionRef = useRef(0);
+    const playNextRef = useRef(null);
+    const playPreviousRef = useRef(null);
+    const wasPlayingRef = useRef(false); // for visibility recovery
 
     useEffect(() => { queueRef.current = queue; }, [queue]);
     useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
     useEffect(() => { volumeRef.current = volume; }, [volume]);
     useEffect(() => { isShuffleOnRef.current = isShuffleOn; }, [isShuffleOn]);
     useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
+
+    // ── Accept audio element from GlobalPlayer ────────────────────────────
+    const setAudioElement = useCallback((el) => {
+        audioElRef.current = el;
+    }, []);
 
     // ── Time tracking ─────────────────────────────────────────────────────
     const stopTimeTracking = useCallback(() => {
@@ -82,24 +88,33 @@ export function PlayerProvider({ children }) {
     const startTimeTracking = useCallback(() => {
         stopTimeTracking();
         intervalRef.current = setInterval(() => {
-            if (playerRef.current?.getCurrentTime) {
-                const time = playerRef.current.getCurrentTime();
-                setCurrentTime(time);
+            let time = 0;
 
-                // Keep lock-screen position state in sync while playing.
-                // This prevents iOS from dropping the media session.
-                if ('mediaSession' in navigator && navigator.mediaSession.metadata) {
-                    try {
-                        const dur = playerRef.current.getDuration?.() || 0;
-                        if (dur > 0) {
-                            navigator.mediaSession.setPositionState({
-                                duration: dur,
-                                playbackRate: 1,
-                                position: Math.min(time, dur),
-                            });
-                        }
-                    } catch { }
-                }
+            if (activePlayerRef.current === 'audio' && audioElRef.current) {
+                time = audioElRef.current.currentTime || 0;
+            } else if (activePlayerRef.current === 'youtube' && playerRef.current?.getCurrentTime) {
+                time = playerRef.current.getCurrentTime();
+            }
+
+            setCurrentTime(time);
+
+            // Keep lock-screen position in sync
+            if ('mediaSession' in navigator && navigator.mediaSession.metadata) {
+                try {
+                    let dur = 0;
+                    if (activePlayerRef.current === 'audio' && audioElRef.current) {
+                        dur = audioElRef.current.duration || 0;
+                    } else if (activePlayerRef.current === 'youtube') {
+                        dur = playerRef.current?.getDuration?.() || 0;
+                    }
+                    if (dur > 0 && isFinite(dur)) {
+                        navigator.mediaSession.setPositionState({
+                            duration: dur,
+                            playbackRate: 1,
+                            position: Math.min(time, dur),
+                        });
+                    }
+                } catch { }
             }
         }, 1000);
     }, [stopTimeTracking]);
@@ -109,9 +124,7 @@ export function PlayerProvider({ children }) {
         return () => stopTimeTracking();
     }, [stopTimeTracking]);
 
-    // ── Initialize YouTube player ─────────────────────────────────────────
-    // Called ONCE from GlobalPlayer when its container div is mounted.
-    // Creates the YT.Player instance that persists for the lifetime of the app.
+    // ── Initialize YouTube player (FALLBACK) ──────────────────────────────
     const initPlayer = useCallback((containerId) => {
         if (playerRef.current) return;
 
@@ -131,21 +144,24 @@ export function PlayerProvider({ children }) {
                     onReady: () => {
                         setIsReady(true);
                         playerRef.current.setVolume(volumeRef.current);
-
-                        // Register the iOS audio-unlock handler now that the
-                        // player exists.  It fires on the first user gesture.
                         registerAudioUnlock(() => playerRef.current);
 
                         // ── Media Session action handlers ──────────────────
-                        // Registered ONCE here so they are never duplicated.
-                        // Use refs to always call the latest playNext/playPrevious.
                         if ('mediaSession' in navigator) {
                             navigator.mediaSession.setActionHandler('play', () => {
-                                playerRef.current?.playVideo();
+                                if (activePlayerRef.current === 'audio' && audioElRef.current) {
+                                    audioElRef.current.play().catch(() => { });
+                                } else {
+                                    playerRef.current?.playVideo();
+                                }
                                 resumeSilentAudio();
                             });
                             navigator.mediaSession.setActionHandler('pause', () => {
-                                playerRef.current?.pauseVideo();
+                                if (activePlayerRef.current === 'audio' && audioElRef.current) {
+                                    audioElRef.current.pause();
+                                } else {
+                                    playerRef.current?.pauseVideo();
+                                }
                             });
                             navigator.mediaSession.setActionHandler('nexttrack', () => {
                                 playNextRef.current?.();
@@ -153,28 +169,43 @@ export function PlayerProvider({ children }) {
                             navigator.mediaSession.setActionHandler('previoustrack', () => {
                                 playPreviousRef.current?.();
                             });
-                            // seekbackward/seekforward keep iOS scrubber functional
                             navigator.mediaSession.setActionHandler('seekbackward', (details) => {
                                 const offset = details?.seekOffset || 10;
-                                const time = playerRef.current?.getCurrentTime?.() || 0;
-                                playerRef.current?.seekTo(Math.max(time - offset, 0), true);
+                                if (activePlayerRef.current === 'audio' && audioElRef.current) {
+                                    audioElRef.current.currentTime = Math.max(audioElRef.current.currentTime - offset, 0);
+                                } else {
+                                    const time = playerRef.current?.getCurrentTime?.() || 0;
+                                    playerRef.current?.seekTo(Math.max(time - offset, 0), true);
+                                }
                             });
                             navigator.mediaSession.setActionHandler('seekforward', (details) => {
                                 const offset = details?.seekOffset || 10;
-                                const time = playerRef.current?.getCurrentTime?.() || 0;
-                                const dur = playerRef.current?.getDuration?.() || 0;
-                                playerRef.current?.seekTo(Math.min(time + offset, dur), true);
+                                if (activePlayerRef.current === 'audio' && audioElRef.current) {
+                                    const dur = audioElRef.current.duration || 0;
+                                    audioElRef.current.currentTime = Math.min(audioElRef.current.currentTime + offset, dur);
+                                } else {
+                                    const time = playerRef.current?.getCurrentTime?.() || 0;
+                                    const dur = playerRef.current?.getDuration?.() || 0;
+                                    playerRef.current?.seekTo(Math.min(time + offset, dur), true);
+                                }
                             });
                             try {
                                 navigator.mediaSession.setActionHandler('seekto', (details) => {
                                     if (details?.seekTime != null) {
-                                        playerRef.current?.seekTo(details.seekTime, true);
+                                        if (activePlayerRef.current === 'audio' && audioElRef.current) {
+                                            audioElRef.current.currentTime = details.seekTime;
+                                        } else {
+                                            playerRef.current?.seekTo(details.seekTime, true);
+                                        }
                                     }
                                 });
                             } catch { /* seekto not supported in all browsers */ }
                         }
                     },
                     onStateChange: (event) => {
+                        // Only handle YT state if youtube is the active player
+                        if (activePlayerRef.current !== 'youtube') return;
+
                         const state = event.data;
 
                         if (state === window.YT.PlayerState.PLAYING) {
@@ -183,14 +214,10 @@ export function PlayerProvider({ children }) {
                             const dur = event.target.getDuration();
                             setDuration(dur);
                             startTimeTracking();
-
-                            // Keep iOS audio session alive in background
                             resumeSilentAudio();
 
                             if ('mediaSession' in navigator) {
                                 navigator.mediaSession.playbackState = 'playing';
-                                // Position state keeps lock-screen scrubber in sync
-                                // and prevents iOS from assuming playback stopped.
                                 try {
                                     navigator.mediaSession.setPositionState({
                                         duration: dur || 0,
@@ -205,9 +232,6 @@ export function PlayerProvider({ children }) {
                         } else if (state === window.YT.PlayerState.PAUSED) {
                             setIsPlaying(false);
                             stopTimeTracking();
-                            // Only clear wasPlayingRef if the page is visible.
-                            // If hidden, the OS suspended playback — we want
-                            // to auto-resume when the page returns.
                             if (typeof document === 'undefined' || document.visibilityState === 'visible') {
                                 wasPlayingRef.current = false;
                             }
@@ -223,8 +247,6 @@ export function PlayerProvider({ children }) {
                     },
                     onError: (event) => {
                         console.warn('YouTube player error:', event.data);
-
-                        // Only skip for permanent video errors
                         if ([100, 101, 150].includes(event.data)) {
                             playNextRef.current?.();
                         }
@@ -236,7 +258,6 @@ export function PlayerProvider({ children }) {
         if (window.YT?.Player) {
             create();
         } else {
-            // Poll until the IFrame API script has loaded
             const check = setInterval(() => {
                 if (window.YT?.Player) {
                     clearInterval(check);
@@ -249,7 +270,6 @@ export function PlayerProvider({ children }) {
     // ── Shuffle helpers ────────────────────────────────────────────────────
     const buildShuffledOrder = useCallback((q, startIdx) => {
         const indices = q.map((_, i) => i).filter(i => i !== startIdx);
-        // Fisher-Yates shuffle
         for (let i = indices.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [indices[i], indices[j]] = [indices[j], indices[i]];
@@ -278,10 +298,69 @@ export function PlayerProvider({ children }) {
         });
     }, []);
 
+    // ── Stop the other player when switching ──────────────────────────────
+    const stopAllPlayers = useCallback(() => {
+        try {
+            if (audioElRef.current) {
+                audioElRef.current.pause();
+                audioElRef.current.src = '';
+            }
+        } catch { }
+        try {
+            if (playerRef.current?.pauseVideo) {
+                playerRef.current.pauseVideo();
+            }
+        } catch { }
+    }, []);
+
+    // ── Wire HTML5 <audio> events ─────────────────────────────────────────
+    const setupAudioEvents = useCallback((audioEl) => {
+        if (!audioEl) return;
+
+        audioEl.onplay = () => {
+            if (activePlayerRef.current !== 'audio') return;
+            setIsPlaying(true);
+            wasPlayingRef.current = true;
+            startTimeTracking();
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.playbackState = 'playing';
+            }
+        };
+
+        audioEl.onpause = () => {
+            if (activePlayerRef.current !== 'audio') return;
+            setIsPlaying(false);
+            stopTimeTracking();
+            if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+                wasPlayingRef.current = false;
+            }
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.playbackState = 'paused';
+            }
+        };
+
+        audioEl.onloadedmetadata = () => {
+            if (activePlayerRef.current !== 'audio') return;
+            const dur = audioEl.duration;
+            if (dur && isFinite(dur)) {
+                setDuration(dur);
+            }
+        };
+
+        audioEl.onended = () => {
+            if (activePlayerRef.current !== 'audio') return;
+            playNextRef.current?.();
+        };
+
+        audioEl.onerror = () => {
+            if (activePlayerRef.current !== 'audio') return;
+            console.warn('HTML5 audio error — track will advance');
+            playNextRef.current?.();
+        };
+    }, [startTimeTracking, stopTimeTracking]);
+
     // ── Match a single track via the API ──────────────────────────────────
-    // Checks MongoDB cache first; scrapes YouTube only on a cache miss.
     const matchTrack = useCallback(async (track) => {
-        // Already matched (from batch import) — skip the network call
         if (track.youtubeVideoId) return track.youtubeVideoId;
 
         try {
@@ -306,10 +385,34 @@ export function PlayerProvider({ children }) {
         return null;
     }, []);
 
-    // ── Play a video by ID ────────────────────────────────────────────────
-    // Reuses the existing YT.Player — never destroys/recreates the iframe.
-    const play = useCallback((videoId) => {
+    // ── Fetch direct audio URL from server ────────────────────────────────
+    const fetchAudioUrl = useCallback(async (videoId) => {
+        try {
+            const res = await fetch(`/api/audio-url/${videoId}`);
+            if (res.ok) {
+                const data = await res.json();
+                return data.url || null;
+            }
+        } catch (err) {
+            console.warn('Audio URL fetch failed:', err);
+        }
+        return null;
+    }, []);
+
+    // ── Play a video using YT IFrame (fallback) ──────────────────────────
+    const playViaYouTube = useCallback((videoId) => {
         if (!playerRef.current || !videoId) return;
+
+        // Stop HTML5 audio if it was playing
+        try {
+            if (audioElRef.current) {
+                audioElRef.current.pause();
+                audioElRef.current.src = '';
+            }
+        } catch { }
+
+        activePlayerRef.current = 'youtube';
+        setActivePlayer('youtube');
         playerRef.current.loadVideoById(videoId);
 
         setTimeout(() => {
@@ -318,6 +421,38 @@ export function PlayerProvider({ children }) {
             } catch { }
         }, 200);
     }, []);
+
+    // ── Play audio via HTML5 <audio> element (primary) ────────────────────
+    const playViaAudio = useCallback((audioUrl) => {
+        const audioEl = audioElRef.current;
+        if (!audioEl || !audioUrl) return false;
+
+        // Stop YouTube iframe if it was playing
+        try {
+            if (playerRef.current?.pauseVideo) {
+                playerRef.current.pauseVideo();
+            }
+        } catch { }
+
+        activePlayerRef.current = 'audio';
+        setActivePlayer('audio');
+
+        // Set up event handlers
+        setupAudioEvents(audioEl);
+
+        // Load and play
+        audioEl.src = audioUrl;
+        audioEl.volume = volumeRef.current / 100;
+        const playPromise = audioEl.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch((err) => {
+                console.warn('HTML5 audio play failed:', err);
+                return false;
+            });
+        }
+
+        return true;
+    }, [setupAudioEvents]);
 
     // ── Play a track (with on-demand matching) ────────────────────────────
     const playTrack = useCallback(async (track, index, newQueue) => {
@@ -328,73 +463,103 @@ export function PlayerProvider({ children }) {
         setIsLoading(true);
 
         const videoId = await matchTrack(track);
-        setIsLoading(false);
+        if (!videoId) {
+            setIsLoading(false);
+            return;
+        }
 
-        if (videoId) {
-            // ── Media Session metadata ────────────────────────────
-            // Set metadata BEFORE play() — iOS reads it at the moment
-            // the audio session activates.  Setting it after loadVideoById
-            // is too late on some iOS versions.
-            if ('mediaSession' in navigator) {
-                const artworkSrc = track.albumImage
-                    || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-                navigator.mediaSession.metadata = new MediaMetadata({
-                    title: track.name,
-                    artist: track.artists?.join(', ') || 'Unknown Artist',
-                    album: track.album || '',
-                    artwork: [
-                        { src: artworkSrc, sizes: '96x96', type: 'image/jpeg' },
-                        { src: artworkSrc, sizes: '128x128', type: 'image/jpeg' },
-                        { src: artworkSrc, sizes: '192x192', type: 'image/jpeg' },
-                        { src: artworkSrc, sizes: '256x256', type: 'image/jpeg' },
-                        { src: artworkSrc, sizes: '384x384', type: 'image/jpeg' },
-                        { src: artworkSrc, sizes: '512x512', type: 'image/jpeg' },
-                    ],
+        // ── Media Session metadata ────────────────────────────
+        if ('mediaSession' in navigator) {
+            const artworkSrc = track.albumImage
+                || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: track.name,
+                artist: track.artists?.join(', ') || 'Unknown Artist',
+                album: track.album || '',
+                artwork: [
+                    { src: artworkSrc, sizes: '96x96', type: 'image/jpeg' },
+                    { src: artworkSrc, sizes: '128x128', type: 'image/jpeg' },
+                    { src: artworkSrc, sizes: '192x192', type: 'image/jpeg' },
+                    { src: artworkSrc, sizes: '256x256', type: 'image/jpeg' },
+                    { src: artworkSrc, sizes: '384x384', type: 'image/jpeg' },
+                    { src: artworkSrc, sizes: '512x512', type: 'image/jpeg' },
+                ],
+            });
+        }
+
+        // ── Try HTML5 <audio> first (background-safe) ─────────
+        const audioUrl = await fetchAudioUrl(videoId);
+
+        if (audioUrl && audioElRef.current) {
+            stopAllPlayers();
+            setIsLoading(false);
+
+            activePlayerRef.current = 'audio';
+            setActivePlayer('audio');
+            setupAudioEvents(audioElRef.current);
+
+            audioElRef.current.src = audioUrl;
+            audioElRef.current.volume = volumeRef.current / 100;
+
+            const playPromise = audioElRef.current.play();
+            if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch(() => {
+                    // HTML5 audio failed — fall back to YouTube
+                    console.warn('HTML5 audio play failed, falling back to YouTube IFrame');
+                    playViaYouTube(videoId);
                 });
             }
-
-            play(videoId);
-
-            // Keep the silent audio helper running for iOS background
-            resumeSilentAudio();
-
-            // ── Prefetch optimisation ─────────────────────────────
-            // While the current track plays, silently resolve the next
-            // track's youtubeId so it's cached in MongoDB when needed.
-            const q = newQueue || queueRef.current;
-            if (q[index + 1]) {
-                matchTrack(q[index + 1]).catch(() => { /* non-critical */ });
-            }
-
-            // ── Rebuild shuffled order when a track is selected directly ──
-            // This ensures next/previous navigate from the newly chosen track.
-            if (isShuffleOnRef.current) {
-                const order = buildShuffledOrder(q, index);
-                shuffledOrderRef.current = order;
-                shufflePositionRef.current = 0;
-            }
+        } else {
+            // ── Fallback to YouTube IFrame ─────────────────────
+            setIsLoading(false);
+            playViaYouTube(videoId);
         }
-    }, [matchTrack, play, buildShuffledOrder]);
+
+        // Keep the silent audio helper running for iOS
+        resumeSilentAudio();
+
+        // ── Prefetch: resolve the next track's youtubeId ──────
+        const q = newQueue || queueRef.current;
+        if (q[index + 1]) {
+            matchTrack(q[index + 1]).catch(() => { });
+        }
+
+        // ── Rebuild shuffled order on direct track selection ───
+        if (isShuffleOnRef.current) {
+            const order = buildShuffledOrder(q, index);
+            shuffledOrderRef.current = order;
+            shufflePositionRef.current = 0;
+        }
+    }, [matchTrack, fetchAudioUrl, playViaYouTube, stopAllPlayers, setupAudioEvents, buildShuffledOrder]);
 
     // ── Toggle play / pause ───────────────────────────────────────────────
     const togglePlay = useCallback(() => {
-        if (!playerRef.current) return;
-        try {
-            // Read directly from the player to avoid stale isPlaying closure
-            const state = playerRef.current.getPlayerState();
-            if (state === 1 /* YT.PlayerState.PLAYING */) {
-                playerRef.current.pauseVideo();
+        if (activePlayerRef.current === 'audio' && audioElRef.current) {
+            if (audioElRef.current.paused) {
+                audioElRef.current.play().catch(() => { });
             } else {
+                audioElRef.current.pause();
+            }
+        } else if (playerRef.current) {
+            try {
+                const state = playerRef.current.getPlayerState();
+                if (state === 1) {
+                    playerRef.current.pauseVideo();
+                } else {
+                    playerRef.current.playVideo();
+                }
+            } catch {
                 playerRef.current.playVideo();
             }
-        } catch {
-            playerRef.current.playVideo();
         }
     }, []);
 
     // ── Seek ──────────────────────────────────────────────────────────────
     const seek = useCallback((seconds) => {
-        if (playerRef.current) {
+        if (activePlayerRef.current === 'audio' && audioElRef.current) {
+            audioElRef.current.currentTime = seconds;
+            setCurrentTime(seconds);
+        } else if (playerRef.current) {
             playerRef.current.seekTo(seconds, true);
             setCurrentTime(seconds);
         }
@@ -403,6 +568,9 @@ export function PlayerProvider({ children }) {
     // ── Volume ────────────────────────────────────────────────────────────
     const setVolume = useCallback((val) => {
         setVolumeState(val);
+        if (activePlayerRef.current === 'audio' && audioElRef.current) {
+            audioElRef.current.volume = val / 100;
+        }
         if (playerRef.current?.setVolume) {
             playerRef.current.setVolume(val);
         }
@@ -415,13 +583,11 @@ export function PlayerProvider({ children }) {
         const repeat = repeatModeRef.current;
         const shuffle = isShuffleOnRef.current;
 
-        // Repeat one: replay the current track from the start
         if (repeat === 'one') {
             if (q[idx]) playTrack(q[idx], idx);
             return;
         }
 
-        // Shuffle mode: advance through the shuffled order
         if (shuffle) {
             const order = shuffledOrderRef.current;
             let nextPos = shufflePositionRef.current + 1;
@@ -438,7 +604,6 @@ export function PlayerProvider({ children }) {
             return;
         }
 
-        // Normal sequential playback
         for (let i = idx + 1; i < q.length; i++) {
             if (q[i].youtubeVideoId) {
                 playTrack(q[i], i);
@@ -446,7 +611,6 @@ export function PlayerProvider({ children }) {
             }
         }
 
-        // Reached end — wrap around if repeat all
         if (repeat === 'all') {
             for (let i = 0; i < idx; i++) {
                 if (q[i].youtubeVideoId) {
@@ -455,7 +619,6 @@ export function PlayerProvider({ children }) {
                 }
             }
         }
-        // No playable track found ahead — stop playback silently.
     }, [playTrack]);
 
     const playPrevious = useCallback(() => {
@@ -463,7 +626,6 @@ export function PlayerProvider({ children }) {
         const idx = currentIndexRef.current;
         const shuffle = isShuffleOnRef.current;
 
-        // Shuffle mode: step back through the shuffled order
         if (shuffle) {
             const order = shuffledOrderRef.current;
             let prevPos = shufflePositionRef.current - 1;
@@ -476,17 +638,14 @@ export function PlayerProvider({ children }) {
 
         if (!q || idx <= 0) return;
 
-        // Skip tracks that have no YouTube match — only play matched tracks.
         for (let i = idx - 1; i >= 0; i--) {
             if (q[i].youtubeVideoId) {
                 playTrack(q[i], i);
                 return;
             }
         }
-        // No playable track found behind — stop playback silently.
     }, [playTrack]);
 
-    // Keep ref in sync so the YT onStateChange closure can call the latest version
     useEffect(() => { playNextRef.current = playNext; }, [playNext]);
     useEffect(() => { playPreviousRef.current = playPrevious; }, [playPrevious]);
 
@@ -509,14 +668,18 @@ export function PlayerProvider({ children }) {
         isLoading,
         isShuffleOn,
         repeatMode,
+        activePlayer,
 
         // Initialisation (called by GlobalPlayer)
         initPlayer,
         playerRef,
         wasPlayingRef,
+        audioElRef,
+        activePlayerRef,
+        setAudioElement,
 
         // Actions
-        play,
+        play: playViaYouTube, // direct video play (legacy compat)
         playTrack,
         togglePlay,
         seek,

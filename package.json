@@ -30,6 +30,7 @@
         "react-dom": "19.2.3",
         "sass": "^1.97.3",
         "spotify-url-info": "^3.2.18",
+        "youtubei.js": "^16.0.1",
         "yt-search": "^2.13.1"
     },
     "devDependencies": {
