@@ -57,9 +57,13 @@ async function handler(req, res) {
                     $set: {
                         name: t.name,
                         artists: t.artists,
-                        album: t.album,
                         duration: t.duration,
-                        albumImage: t.albumImage,
+                        // Only overwrite album/albumImage when Spotify gave us
+                        // a real value — protect previously-enriched data from
+                        // being clobbered by embed-page imports that return
+                        // 'Unknown Album' / null for these fields.
+                        ...(t.album && t.album !== 'Unknown Album' ? { album: t.album } : {}),
+                        ...(t.albumImage ? { albumImage: t.albumImage } : {}),
                     },
                     $setOnInsert: {
                         importedAt: new Date(),
