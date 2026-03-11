@@ -398,8 +398,16 @@ async function upsertTrack(track) {
     const backfill = {};
     if (track.album) backfill.album = track.album;
     if (track.albumImage) backfill.albumImage = track.albumImage;
+
+    // MongoDB rejects having the same field in both $setOnInsert and $set.
+    // Remove backfill keys from $setOnInsert so $set takes precedence.
+    const cleanedSetOnInsert = { ...setOnInsert };
+    for (const key of Object.keys(backfill)) {
+        delete cleanedSetOnInsert[key];
+    }
+
     const updateOp = Object.keys(backfill).length > 0
-        ? { $setOnInsert: setOnInsert, $set: backfill }
+        ? { $setOnInsert: cleanedSetOnInsert, $set: backfill }
         : { $setOnInsert: setOnInsert };
     const existing = await Track.findOneAndUpdate(
         { spotifyId: track.spotifyId },
