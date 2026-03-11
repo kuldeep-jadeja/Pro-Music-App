@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { usePlayer } from '@/context/PlayerContext';
+import { resumeSilentAudio, resumeAudioContext } from '@/lib/unlockAudio';
 
 /**
  * GlobalPlayer — Persistent YouTube IFrame player
@@ -26,8 +27,9 @@ import { usePlayer } from '@/context/PlayerContext';
  * ──────────────────────────────────────────────────────────────────────
  */
 export default function GlobalPlayer() {
-    const { initPlayer } = usePlayer();
+    const { initPlayer, playerRef, wasPlayingRef } = usePlayer();
     const scriptLoaded = useRef(false);
+    const wakeLockRef = useRef(null);
 
     useEffect(() => {
         if (scriptLoaded.current) return;
@@ -61,21 +63,105 @@ export default function GlobalPlayer() {
         };
     }, [initPlayer]);
 
-    // Prevent iOS from suspending the page when it goes to background.
-    // A visibilitychange handler pokes the player to keep the audio
-    // session alive across app switches / lock.
-    const handleVisibilityChange = useCallback(() => {
-        if (typeof document === 'undefined') return;
-        if (document.visibilityState === 'hidden') {
-            // Page going to background — nothing to do; the silent audio
-            // loop in unlockAudio.js keeps the audio session alive.
+    // ── Wake Lock helpers ─────────────────────────────────────────────
+    // The Screen Wake Lock API prevents the OS from suspending the tab
+    // while audio is playing. Supported on Android Chrome 84+.
+    // Not supported on iOS Safari — the silent audio workaround covers iOS.
+    const requestWakeLock = useCallback(async () => {
+        try {
+            if ('wakeLock' in navigator && !wakeLockRef.current) {
+                wakeLockRef.current = await navigator.wakeLock.request('screen');
+                wakeLockRef.current.addEventListener('release', () => {
+                    wakeLockRef.current = null;
+                });
+            }
+        } catch {
+            // Wake Lock request failed (e.g. low battery, not supported)
         }
     }, []);
+
+    const releaseWakeLock = useCallback(() => {
+        try {
+            if (wakeLockRef.current) {
+                wakeLockRef.current.release();
+                wakeLockRef.current = null;
+            }
+        } catch { }
+    }, []);
+
+    // ── Visibility change handler ─────────────────────────────────────
+    // When the page returns to the foreground, resume all keep-alive
+    // mechanisms and recover playback if it was interrupted by the OS.
+    const handleVisibilityChange = useCallback(() => {
+        if (typeof document === 'undefined') return;
+
+        if (document.visibilityState === 'visible') {
+            // ── Page returning to foreground ──────────────────────
+
+            // 1. Resume silent audio + AudioContext keep-alive
+            resumeSilentAudio();
+            resumeAudioContext();
+
+            // 2. Re-acquire Wake Lock (it's released when page goes hidden)
+            requestWakeLock();
+
+            // 3. Check if playback was interrupted by the OS
+            //    Give the YT player a moment to settle after page return
+            setTimeout(() => {
+                const player = playerRef.current;
+                if (!player || !wasPlayingRef.current) return;
+
+                try {
+                    const state = player.getPlayerState();
+                    // YT states: -1=unstarted, 0=ended, 1=playing, 2=paused, 3=buffering, 5=cued
+                    // If we were playing but now we're paused/buffering/cued, resume
+                    if (state !== 1 /* PLAYING */ && state !== 0 /* ENDED */) {
+                        player.playVideo();
+                    }
+                } catch { }
+            }, 300);
+        } else {
+            // ── Page going to background ─────────────────────────
+            // Record whether we were playing so we can resume on return.
+            // wasPlayingRef is updated by PlayerContext's onStateChange,
+            // but we also set it here as a safety net.
+            try {
+                const player = playerRef.current;
+                if (player) {
+                    const state = player.getPlayerState();
+                    if (state === 1 /* PLAYING */) {
+                        wasPlayingRef.current = true;
+                    }
+                }
+            } catch { }
+
+            // Keep the silent audio running — do NOT pause it
+            resumeSilentAudio();
+        }
+    }, [playerRef, wasPlayingRef, requestWakeLock]);
 
     useEffect(() => {
         document.addEventListener('visibilitychange', handleVisibilityChange);
         return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
     }, [handleVisibilityChange]);
+
+    // ── Acquire/release Wake Lock based on playback state ─────────────
+    // We observe the wasPlayingRef to know when to toggle the lock.
+    // This is driven by a periodic check since wasPlayingRef is a ref.
+    useEffect(() => {
+        const checkInterval = setInterval(() => {
+            if (wasPlayingRef.current && !wakeLockRef.current) {
+                requestWakeLock();
+            } else if (!wasPlayingRef.current && wakeLockRef.current) {
+                releaseWakeLock();
+            }
+        }, 3000);
+
+        return () => {
+            clearInterval(checkInterval);
+            releaseWakeLock();
+        };
+    }, [wasPlayingRef, requestWakeLock, releaseWakeLock]);
 
     return (
         /*

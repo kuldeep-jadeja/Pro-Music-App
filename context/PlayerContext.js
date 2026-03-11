@@ -63,6 +63,7 @@ export function PlayerProvider({ children }) {
     const shufflePositionRef = useRef(0); // current position in shuffledOrderRef
     const playNextRef = useRef(null); // populated after playNext is defined
     const playPreviousRef = useRef(null); // populated after playPrevious is defined
+    const wasPlayingRef = useRef(false); // true if player was playing before page went hidden
 
     useEffect(() => { queueRef.current = queue; }, [queue]);
     useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
@@ -178,6 +179,7 @@ export function PlayerProvider({ children }) {
 
                         if (state === window.YT.PlayerState.PLAYING) {
                             setIsPlaying(true);
+                            wasPlayingRef.current = true;
                             const dur = event.target.getDuration();
                             setDuration(dur);
                             startTimeTracking();
@@ -203,6 +205,12 @@ export function PlayerProvider({ children }) {
                         } else if (state === window.YT.PlayerState.PAUSED) {
                             setIsPlaying(false);
                             stopTimeTracking();
+                            // Only clear wasPlayingRef if the page is visible.
+                            // If hidden, the OS suspended playback — we want
+                            // to auto-resume when the page returns.
+                            if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+                                wasPlayingRef.current = false;
+                            }
                             if ('mediaSession' in navigator) {
                                 navigator.mediaSession.playbackState = 'paused';
                             }
@@ -505,6 +513,7 @@ export function PlayerProvider({ children }) {
         // Initialisation (called by GlobalPlayer)
         initPlayer,
         playerRef,
+        wasPlayingRef,
 
         // Actions
         play,
