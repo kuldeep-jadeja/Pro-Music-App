@@ -9,23 +9,22 @@ import {
 import { registerAudioUnlock, resumeSilentAudio } from '@/lib/unlockAudio';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PlayerContext — Dual-player architecture for background-safe playback
+// PlayerContext — Hybrid Playback Architecture
 //
-// Architecture:
-//   • PRIMARY: HTML5 <audio> element loaded with direct audio URLs extracted
-//     server-side via /api/audio-url/[videoId]. This supports background
-//     playback on iOS (lock screen) and Android (minimise) natively.
-//   • FALLBACK: YT.Player IFrame — used if audio URL extraction fails.
-//     Works for foreground playback only.
-//   • The active player is tracked by `activePlayerRef` ('audio' | 'youtube').
-//   • Media Session API controls (lock screen) work with both players.
-//   • The <audio> element is created in GlobalPlayer and passed via
-//     `setAudioElement()`.
+// Desktop browsers → YouTube IFrame player (zero server bandwidth)
+// Mobile / PWA     → HTML5 <audio> with server-extracted audio URLs
+//                    (supports background playback, lock screen controls)
+// Fallback         → If audio extraction fails, fall back to YouTube IFrame
+//
+// Device detection:
+//   isMobileDevice  — /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+//   isStandalone    — window.matchMedia('(display-mode: standalone)').matches
+//   preferredPlayer — (isMobileDevice || isStandalone) ? 'audio' : 'youtube'
 //
 // Exposed API:
 //   State:   queue, currentIndex, currentTrack, isPlaying, currentTime,
 //            duration, volume, isReady, isLoading, activePlayer
-//   Actions: play(videoId), playTrack(track, index, queue?), togglePlay(),
+//   Actions: playTrack(track, index, queue?), togglePlay(),
 //            seek(seconds), setVolume(val), playNext(), playPrevious(),
 //            setQueue(tracks), initPlayer(containerId), setAudioElement(el),
 //            toggleShuffle(), cycleRepeat()
@@ -34,11 +33,30 @@ import { registerAudioUnlock, resumeSilentAudio } from '@/lib/unlockAudio';
 
 const PlayerContext = createContext(null);
 
+// ── Device detection (runs once on module load) ───────────────────────────
+function detectPreferredPlayer() {
+    if (typeof window === 'undefined') return 'youtube';
+
+    const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const isStandalone =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        navigator.standalone === true;
+
+    return (isMobileDevice || isStandalone) ? 'audio' : 'youtube';
+}
+
 export function PlayerProvider({ children }) {
-    const playerRef = useRef(null);       // YT.Player instance (fallback)
-    const audioElRef = useRef(null);      // HTML5 <audio> element (primary)
+    const playerRef = useRef(null);       // YT.Player instance
+    const audioElRef = useRef(null);      // HTML5 <audio> element
     const intervalRef = useRef(null);
     const activePlayerRef = useRef(null); // 'audio' | 'youtube' | null
+    const currentVideoIdRef = useRef(null); // for fallback on audio error
+
+    // ── Device preference (computed once) ─────────────────────────────────
+    const preferredPlayerRef = useRef('youtube');
+    useEffect(() => {
+        preferredPlayerRef.current = detectPreferredPlayer();
+    }, []);
 
     // ── Playback state ────────────────────────────────────────────────────
     const [queue, setQueueState] = useState([]);
@@ -51,7 +69,7 @@ export function PlayerProvider({ children }) {
     const [isReady, setIsReady] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [isShuffleOn, setIsShuffleOn] = useState(false);
-    const [repeatMode, setRepeatMode] = useState('off'); // 'off' | 'all' | 'one'
+    const [repeatMode, setRepeatMode] = useState('off');
     const [activePlayer, setActivePlayer] = useState(null); // 'audio' | 'youtube'
 
     // ── Refs for stale-closure prevention ─────────────────────────────────
@@ -64,7 +82,7 @@ export function PlayerProvider({ children }) {
     const shufflePositionRef = useRef(0);
     const playNextRef = useRef(null);
     const playPreviousRef = useRef(null);
-    const wasPlayingRef = useRef(false); // for visibility recovery
+    const wasPlayingRef = useRef(false);
 
     useEffect(() => { queueRef.current = queue; }, [queue]);
     useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
@@ -119,12 +137,11 @@ export function PlayerProvider({ children }) {
         }, 1000);
     }, [stopTimeTracking]);
 
-    // Cleanup on unmount
     useEffect(() => {
         return () => stopTimeTracking();
     }, [stopTimeTracking]);
 
-    // ── Initialize YouTube player (FALLBACK) ──────────────────────────────
+    // ── Initialize YouTube player ─────────────────────────────────────────
     const initPlayer = useCallback((containerId) => {
         if (playerRef.current) return;
 
@@ -147,6 +164,8 @@ export function PlayerProvider({ children }) {
                         registerAudioUnlock(() => playerRef.current);
 
                         // ── Media Session action handlers ──────────────────
+                        // Registered ONCE. Each handler delegates to the
+                        // currently active player (audio or youtube).
                         if ('mediaSession' in navigator) {
                             navigator.mediaSession.setActionHandler('play', () => {
                                 if (activePlayerRef.current === 'audio' && audioElRef.current) {
@@ -203,7 +222,7 @@ export function PlayerProvider({ children }) {
                         }
                     },
                     onStateChange: (event) => {
-                        // Only handle YT state if youtube is the active player
+                        // Only handle YT state changes when youtube is the active player
                         if (activePlayerRef.current !== 'youtube') return;
 
                         const state = event.data;
@@ -232,6 +251,8 @@ export function PlayerProvider({ children }) {
                         } else if (state === window.YT.PlayerState.PAUSED) {
                             setIsPlaying(false);
                             stopTimeTracking();
+                            // Only clear wasPlaying if page is visible
+                            // (OS-suspended pause should NOT clear the flag)
                             if (typeof document === 'undefined' || document.visibilityState === 'visible') {
                                 wasPlayingRef.current = false;
                             }
@@ -298,14 +319,19 @@ export function PlayerProvider({ children }) {
         });
     }, []);
 
-    // ── Stop the other player when switching ──────────────────────────────
-    const stopAllPlayers = useCallback(() => {
+    // ── Clean player switching ─────────────────────────────────────────────
+    // When switching audio → youtube: stop audio element
+    const stopAudioPlayer = useCallback(() => {
         try {
             if (audioElRef.current) {
                 audioElRef.current.pause();
                 audioElRef.current.src = '';
             }
         } catch { }
+    }, []);
+
+    // When switching youtube → audio: stop YT iframe
+    const stopYouTubePlayer = useCallback(() => {
         try {
             if (playerRef.current?.pauseVideo) {
                 playerRef.current.pauseVideo();
@@ -314,7 +340,7 @@ export function PlayerProvider({ children }) {
     }, []);
 
     // ── Wire HTML5 <audio> events ─────────────────────────────────────────
-    const setupAudioEvents = useCallback((audioEl) => {
+    const setupAudioEvents = useCallback((audioEl, videoId) => {
         if (!audioEl) return;
 
         audioEl.onplay = () => {
@@ -339,6 +365,11 @@ export function PlayerProvider({ children }) {
             }
         };
 
+        audioEl.ontimeupdate = () => {
+            if (activePlayerRef.current !== 'audio') return;
+            setCurrentTime(audioEl.currentTime || 0);
+        };
+
         audioEl.onloadedmetadata = () => {
             if (activePlayerRef.current !== 'audio') return;
             const dur = audioEl.duration;
@@ -352,12 +383,27 @@ export function PlayerProvider({ children }) {
             playNextRef.current?.();
         };
 
+        // ── TASK 7: Audio error → fallback to YouTube IFrame ──────────
         audioEl.onerror = () => {
             if (activePlayerRef.current !== 'audio') return;
-            console.warn('HTML5 audio error — track will advance');
-            playNextRef.current?.();
+            console.warn('HTML5 audio error — falling back to YouTube IFrame');
+
+            // Fall back to YouTube IFrame for the current video
+            const fallbackId = currentVideoIdRef.current;
+            if (fallbackId && playerRef.current) {
+                stopAudioPlayer();
+                activePlayerRef.current = 'youtube';
+                setActivePlayer('youtube');
+                playerRef.current.loadVideoById(fallbackId);
+                setTimeout(() => {
+                    try { playerRef.current.playVideo(); } catch { }
+                }, 200);
+            } else {
+                // No fallback possible — advance to next track
+                playNextRef.current?.();
+            }
         };
-    }, [startTimeTracking, stopTimeTracking]);
+    }, [startTimeTracking, stopTimeTracking, stopAudioPlayer]);
 
     // ── Match a single track via the API ──────────────────────────────────
     const matchTrack = useCallback(async (track) => {
@@ -385,13 +431,13 @@ export function PlayerProvider({ children }) {
         return null;
     }, []);
 
-    // ── Fetch direct audio URL from server ────────────────────────────────
+    // ── Fetch direct audio URL from server (mobile only) ──────────────────
     const fetchAudioUrl = useCallback(async (videoId) => {
         try {
             const res = await fetch(`/api/audio-url/${videoId}`);
             if (res.ok) {
                 const data = await res.json();
-                return data.url || null;
+                return data.audioUrl || null;
             }
         } catch (err) {
             console.warn('Audio URL fetch failed:', err);
@@ -399,62 +445,22 @@ export function PlayerProvider({ children }) {
         return null;
     }, []);
 
-    // ── Play a video using YT IFrame (fallback) ──────────────────────────
+    // ── Play via YouTube IFrame ───────────────────────────────────────────
     const playViaYouTube = useCallback((videoId) => {
         if (!playerRef.current || !videoId) return;
 
-        // Stop HTML5 audio if it was playing
-        try {
-            if (audioElRef.current) {
-                audioElRef.current.pause();
-                audioElRef.current.src = '';
-            }
-        } catch { }
+        stopAudioPlayer();
 
         activePlayerRef.current = 'youtube';
         setActivePlayer('youtube');
         playerRef.current.loadVideoById(videoId);
 
         setTimeout(() => {
-            try {
-                playerRef.current.playVideo();
-            } catch { }
+            try { playerRef.current.playVideo(); } catch { }
         }, 200);
-    }, []);
+    }, [stopAudioPlayer]);
 
-    // ── Play audio via HTML5 <audio> element (primary) ────────────────────
-    const playViaAudio = useCallback((audioUrl) => {
-        const audioEl = audioElRef.current;
-        if (!audioEl || !audioUrl) return false;
-
-        // Stop YouTube iframe if it was playing
-        try {
-            if (playerRef.current?.pauseVideo) {
-                playerRef.current.pauseVideo();
-            }
-        } catch { }
-
-        activePlayerRef.current = 'audio';
-        setActivePlayer('audio');
-
-        // Set up event handlers
-        setupAudioEvents(audioEl);
-
-        // Load and play
-        audioEl.src = audioUrl;
-        audioEl.volume = volumeRef.current / 100;
-        const playPromise = audioEl.play();
-        if (playPromise && typeof playPromise.catch === 'function') {
-            playPromise.catch((err) => {
-                console.warn('HTML5 audio play failed:', err);
-                return false;
-            });
-        }
-
-        return true;
-    }, [setupAudioEvents]);
-
-    // ── Play a track (with on-demand matching) ────────────────────────────
+    // ── Play a track (HYBRID routing) ─────────────────────────────────────
     const playTrack = useCallback(async (track, index, newQueue) => {
         if (newQueue) setQueueState(newQueue);
 
@@ -468,7 +474,10 @@ export function PlayerProvider({ children }) {
             return;
         }
 
-        // ── Media Session metadata ────────────────────────────
+        // Store videoId for audio error fallback
+        currentVideoIdRef.current = videoId;
+
+        // ── Media Session metadata (set before playback) ──────────
         if ('mediaSession' in navigator) {
             const artworkSrc = track.albumImage
                 || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
@@ -487,30 +496,41 @@ export function PlayerProvider({ children }) {
             });
         }
 
-        // ── Try HTML5 <audio> first (background-safe) ─────────
-        const audioUrl = await fetchAudioUrl(videoId);
+        // ── HYBRID DECISION ───────────────────────────────────────
+        // Desktop → always use YouTube IFrame (zero bandwidth)
+        // Mobile / PWA → try HTML5 <audio> first, fallback to IFrame
+        const preferred = preferredPlayerRef.current;
 
-        if (audioUrl && audioElRef.current) {
-            stopAllPlayers();
-            setIsLoading(false);
+        if (preferred === 'audio' && audioElRef.current) {
+            // ── Mobile / PWA path: try server-extracted audio URL ──
+            const audioUrl = await fetchAudioUrl(videoId);
 
-            activePlayerRef.current = 'audio';
-            setActivePlayer('audio');
-            setupAudioEvents(audioElRef.current);
+            if (audioUrl) {
+                stopYouTubePlayer();
+                setIsLoading(false);
 
-            audioElRef.current.src = audioUrl;
-            audioElRef.current.volume = volumeRef.current / 100;
+                activePlayerRef.current = 'audio';
+                setActivePlayer('audio');
+                setupAudioEvents(audioElRef.current, videoId);
 
-            const playPromise = audioElRef.current.play();
-            if (playPromise && typeof playPromise.catch === 'function') {
-                playPromise.catch(() => {
-                    // HTML5 audio failed — fall back to YouTube
-                    console.warn('HTML5 audio play failed, falling back to YouTube IFrame');
-                    playViaYouTube(videoId);
-                });
+                audioElRef.current.src = audioUrl;
+                audioElRef.current.volume = volumeRef.current / 100;
+
+                const playPromise = audioElRef.current.play();
+                if (playPromise && typeof playPromise.catch === 'function') {
+                    playPromise.catch(() => {
+                        // HTML5 audio play failed — fall back to YouTube
+                        console.warn('HTML5 audio play() failed, falling back to YouTube IFrame');
+                        playViaYouTube(videoId);
+                    });
+                }
+            } else {
+                // Audio URL extraction failed — fall back to YouTube IFrame
+                setIsLoading(false);
+                playViaYouTube(videoId);
             }
         } else {
-            // ── Fallback to YouTube IFrame ─────────────────────
+            // ── Desktop path: use YouTube IFrame directly ──────────
             setIsLoading(false);
             playViaYouTube(videoId);
         }
@@ -518,19 +538,19 @@ export function PlayerProvider({ children }) {
         // Keep the silent audio helper running for iOS
         resumeSilentAudio();
 
-        // ── Prefetch: resolve the next track's youtubeId ──────
+        // ── Prefetch: resolve the next track's youtubeId ──────────
         const q = newQueue || queueRef.current;
         if (q[index + 1]) {
             matchTrack(q[index + 1]).catch(() => { });
         }
 
-        // ── Rebuild shuffled order on direct track selection ───
+        // ── Rebuild shuffled order on direct track selection ───────
         if (isShuffleOnRef.current) {
             const order = buildShuffledOrder(q, index);
             shuffledOrderRef.current = order;
             shufflePositionRef.current = 0;
         }
-    }, [matchTrack, fetchAudioUrl, playViaYouTube, stopAllPlayers, setupAudioEvents, buildShuffledOrder]);
+    }, [matchTrack, fetchAudioUrl, playViaYouTube, stopYouTubePlayer, setupAudioEvents, buildShuffledOrder]);
 
     // ── Toggle play / pause ───────────────────────────────────────────────
     const togglePlay = useCallback(() => {
@@ -543,7 +563,7 @@ export function PlayerProvider({ children }) {
         } else if (playerRef.current) {
             try {
                 const state = playerRef.current.getPlayerState();
-                if (state === 1) {
+                if (state === 1 /* PLAYING */) {
                     playerRef.current.pauseVideo();
                 } else {
                     playerRef.current.playVideo();
@@ -679,7 +699,7 @@ export function PlayerProvider({ children }) {
         setAudioElement,
 
         // Actions
-        play: playViaYouTube, // direct video play (legacy compat)
+        play: playViaYouTube,
         playTrack,
         togglePlay,
         seek,

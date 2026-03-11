@@ -23,10 +23,11 @@ async function getInnertube() {
  * GET /api/audio-url/[videoId]
  *
  * Extracts a direct audio stream URL from YouTube using youtubei.js.
- * Returns { url, mimeType, duration } on success.
+ * Returns { audioUrl, expiresAt } on success.
  *
- * The audio URL is a direct link to the audio stream that can be
- * loaded into a native HTML5 <audio> element for background-safe playback.
+ * The server does NOT proxy audio bytes — it only extracts and returns
+ * the direct YouTube CDN audio URL. The client loads this URL directly
+ * into an HTML5 <audio> element.
  *
  * Redis caching layer (TTL = 2h):
  *   key: audio-url:<videoId>
@@ -51,10 +52,16 @@ export default async function handler(req, res) {
         if (redis) {
             const cached = await redis.get(cacheKey);
             if (cached) {
-                if (isDev) console.log(`[AudioURL] Cache HIT — ${videoId}`);
-                res.setHeader('Cache-Control', 'public, max-age=3600');
-                res.setHeader('X-Cache', 'HIT');
-                return res.status(200).json(JSON.parse(cached));
+                const parsed = JSON.parse(cached);
+                // Check if the cached URL has expired
+                if (parsed.expiresAt && Date.now() < parsed.expiresAt) {
+                    if (isDev) console.log(`[AudioURL] Cache HIT — ${videoId}`);
+                    res.setHeader('Cache-Control', 'public, max-age=3600');
+                    res.setHeader('X-Cache', 'HIT');
+                    return res.status(200).json(parsed);
+                }
+                // Expired — delete stale cache entry
+                try { await redis.del(cacheKey); } catch { }
             }
         }
     } catch (err) {
@@ -79,15 +86,15 @@ export default async function handler(req, res) {
         const formats = streamingData.adaptive_formats || [];
 
         // Find the best audio-only format
-        // Prefer: audio/webm (opus) > audio/mp4 (aac) for quality/size
+        // Prefer audio/mp4 (AAC) for broadest browser compatibility (iOS Safari)
         let audioFormat = null;
 
-        // First, try audio/mp4 (broader browser compatibility, especially iOS)
+        // First: audio/mp4 (AAC — works on all browsers including iOS)
         audioFormat = formats
             .filter(f => f.mime_type?.startsWith('audio/mp4'))
             .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
 
-        // Fallback to audio/webm
+        // Second: audio/webm (Opus — better quality, works on most)
         if (!audioFormat) {
             audioFormat = formats
                 .filter(f => f.mime_type?.startsWith('audio/webm'))
@@ -106,20 +113,20 @@ export default async function handler(req, res) {
             return res.status(404).json({ error: 'No audio format available' });
         }
 
-        // The decipher method gives us the direct URL
-        const url = audioFormat.decipher(yt.session.player);
+        // The decipher method gives us the direct CDN URL
+        const audioUrl = audioFormat.decipher(yt.session.player);
 
-        if (!url) {
+        if (!audioUrl) {
             return res.status(404).json({ error: 'Could not extract audio URL' });
         }
 
+        // YouTube CDN URLs expire in ~6 hours. We set expiresAt to 5h from now
+        // to give a safety margin.
+        const expiresAt = Date.now() + (5 * 60 * 60 * 1000);
+
         const payload = {
-            url,
-            mimeType: audioFormat.mime_type || 'audio/mp4',
-            bitrate: audioFormat.bitrate || 0,
-            duration: audioFormat.approx_duration_ms
-                ? Math.round(audioFormat.approx_duration_ms / 1000)
-                : null,
+            audioUrl,
+            expiresAt,
         };
 
         // ── 3. Cache in Redis ─────────────────────────────────────────

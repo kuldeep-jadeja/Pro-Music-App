@@ -7,19 +7,20 @@ import { resumeSilentAudio, resumeAudioContext } from '@/lib/unlockAudio';
  *
  * Mounted ONCE in _app.js so both players survive page navigation.
  *
- * ─── Dual Player Architecture ─────────────────────────────────────────
- * PRIMARY:  HTML5 <audio> element — plays direct audio URLs extracted by
- *           the server. Supports background playback on iOS and Android
- *           natively (the browser keeps top-level <audio> alive).
+ * ─── Hybrid Playback Architecture ───────────────────────────────────
+ * Desktop:  YouTube IFrame player (zero server bandwidth, unchanged)
+ * Mobile:   HTML5 <audio> element with server-extracted audio URLs
+ *           (supports background playback, lock screen controls)
+ * Fallback: If audio extraction fails, uses YouTube IFrame
  *
- * FALLBACK: YT.Player iframe — used when the server cannot extract an
- *           audio URL. Works for foreground playback only.
+ * Both elements remain mounted at all times. PlayerContext decides
+ * which one to activate based on device detection.
  *
- * ─── iOS Safari Constraints ───────────────────────────────────────────
- * Safari on iOS blocks media elements hidden with display:none or
- * visibility:hidden. Both the <audio> element and the YT iframe must
- * remain in the DOM with real dimensions.
- * ──────────────────────────────────────────────────────────────────────
+ * ─── iOS Safari Constraints ─────────────────────────────────────────
+ * Safari blocks media elements hidden with display:none or
+ * visibility:hidden. Both the <audio> element and the YT iframe
+ * must remain in the DOM with non-zero dimensions.
+ * ────────────────────────────────────────────────────────────────────
  */
 export default function GlobalPlayer() {
     const { initPlayer, setAudioElement, playerRef, audioElRef, wasPlayingRef, activePlayerRef } = usePlayer();
@@ -65,15 +66,16 @@ export default function GlobalPlayer() {
     }, [initPlayer]);
 
     // ── Visibility change handler ─────────────────────────────────────
+    // Handles page background/foreground transitions for both players.
     const handleVisibilityChange = useCallback(() => {
         if (typeof document === 'undefined') return;
 
         if (document.visibilityState === 'visible') {
-            // Page returning to foreground — resume keep-alive
+            // Page returning to foreground
             resumeSilentAudio();
             resumeAudioContext();
 
-            // If HTML5 audio was playing and got interrupted, resume it
+            // Resume playback if it was interrupted by the OS
             setTimeout(() => {
                 if (!wasPlayingRef.current) return;
 
@@ -84,14 +86,14 @@ export default function GlobalPlayer() {
                 } else if (activePlayerRef.current === 'youtube' && playerRef.current) {
                     try {
                         const state = playerRef.current.getPlayerState();
-                        if (state !== 1 && state !== 0) {
+                        if (state !== 1 /* PLAYING */ && state !== 0 /* ENDED */) {
                             playerRef.current.playVideo();
                         }
                     } catch { }
                 }
             }, 300);
         } else {
-            // Page going to background — record state and keep audio alive
+            // Page going to background — record current state
             try {
                 if (activePlayerRef.current === 'audio' && audioElRef.current) {
                     if (!audioElRef.current.paused) {
@@ -99,12 +101,13 @@ export default function GlobalPlayer() {
                     }
                 } else if (activePlayerRef.current === 'youtube' && playerRef.current) {
                     const state = playerRef.current.getPlayerState();
-                    if (state === 1) {
+                    if (state === 1 /* PLAYING */) {
                         wasPlayingRef.current = true;
                     }
                 }
             } catch { }
 
+            // Keep silent audio alive for iOS
             resumeSilentAudio();
         }
     }, [playerRef, audioElRef, wasPlayingRef, activePlayerRef]);
@@ -116,16 +119,16 @@ export default function GlobalPlayer() {
 
     return (
         <>
-            {/* HTML5 <audio> element — PRIMARY player for background playback */}
+            {/* HTML5 <audio> element — used on mobile/PWA for background playback */}
             <audio
                 ref={htmlAudioRef}
                 playsInline
                 webkit-playsinline=""
-                preload="auto"
+                preload="metadata"
                 style={{ position: 'fixed', width: 0, height: 0, opacity: 0 }}
             />
 
-            {/* YouTube IFrame — FALLBACK player */}
+            {/* YouTube IFrame — used on desktop (and as fallback on mobile) */}
             <div
                 style={{
                     position: 'fixed',
