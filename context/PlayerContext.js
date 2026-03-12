@@ -6,7 +6,7 @@ import {
     useCallback,
     useEffect,
 } from 'react';
-import { registerAudioUnlock, resumeSilentAudio } from '@/lib/unlockAudio';
+import { registerAudioUnlock, resumeSilentAudio, SILENT_MP3 } from '@/lib/unlockAudio';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PlayerContext — Hybrid Playback Architecture
@@ -447,6 +447,14 @@ export function PlayerProvider({ children }) {
     const setAudioElement = useCallback((el) => {
         audioElRef.current = el;
         attachStaticAudioListeners(el);
+
+        // Register unlock early, as soon as the audio element is available.
+        // This handles the case where the user interacts before the YouTube API is ready.
+        registerAudioUnlock(
+            () => playerRef.current,
+            () => activePlayerRef.current,
+            () => audioElRef.current
+        );
     }, [attachStaticAudioListeners]);
 
     // ── Match a single track via the API ──────────────────────────────────
@@ -506,9 +514,20 @@ export function PlayerProvider({ children }) {
 
     // ── Play a track (HYBRID routing) ─────────────────────────────────────
     const playTrack = useCallback(async (track, index, newQueue) => {
-        // Prime the audio element immediately on user click to satisfy iOS/WebKit
+        // Prime the audio element immediately on user click to satisfy iOS/WebKit.
+        // We MUST start playing something (even silence) BEFORE the first await
+        // to keep the user gesture alive for the subsequent async play() call.
         if (audioElRef.current) {
-            try { audioElRef.current.play().then(() => audioElRef.current.pause()).catch(() => { }); } catch { }
+            audioElRef.current._isTrackLoading = true; // Flag for registerAudioUnlock
+
+            // Set source to SILENT_MP3 and play it.
+            // DO NOT PAUSE IT. iOS requires the element to be actively "playing"
+            // a source in order to maintain background capability when the
+            // asynchronous URL fetch finishes and we swap the src.
+            if (!audioElRef.current.src || audioElRef.current.src.startsWith('data:')) {
+                audioElRef.current.src = SILENT_MP3;
+            }
+            audioElRef.current.play().catch(() => { });
         }
 
         // Cancel any pending URL refresh from the previous track
@@ -557,6 +576,7 @@ export function PlayerProvider({ children }) {
 
         if (preferred === 'audio' && audioElRef.current) {
             // ── Mobile / PWA path: try server-extracted audio URL ──
+
             const result = await fetchAudioUrl(videoId);
             const audioUrl = result?.audioUrl;
 
@@ -568,8 +588,31 @@ export function PlayerProvider({ children }) {
                 setActivePlayer('audio');
                 setupAudioEvents(audioElRef.current); // sets onerror only
 
+                // Clear the loading flag once we have the real URL and are about to play.
+                // This ensures subsequent MediaSession actions work correctly.
+                if (audioElRef.current) audioElRef.current._isTrackLoading = false;
+
                 audioElRef.current.src = result.audioUrl;
                 audioElRef.current.volume = volumeRef.current / 100;
+                audioElRef.current.load(); // Explicitly call load() for iOS reliability
+
+                // Wait slightly before playing the real URL to allow load() to process
+                const playPromise = audioElRef.current.play();
+                if (playPromise && typeof playPromise.catch === 'function') {
+                    playPromise.catch((err) => {
+                        // If it fails (e.g., interrupted), wait a tiny bit and try again,
+                        // as iOS sometimes throws an abort error if the src swaps too quickly.
+                        console.warn('HTML5 audio play() initial fail, retrying...', err);
+                        setTimeout(() => {
+                            if (audioElRef.current && audioElRef.current.src === result.audioUrl) {
+                                audioElRef.current.play().catch(finalErr => {
+                                    console.warn('HTML5 audio play() failed finally:', finalErr);
+                                    playViaYouTube(videoId);
+                                });
+                            }
+                        }, 100);
+                    });
+                }
 
                 // Schedule proactive refresh before CDN URL expires
                 if (result.expiresAt) {
@@ -589,15 +632,6 @@ export function PlayerProvider({ children }) {
                             }
                         }, msUntilRefresh);
                     }
-                }
-
-                const playPromise = audioElRef.current.play();
-                if (playPromise && typeof playPromise.catch === 'function') {
-                    playPromise.catch(() => {
-                        // HTML5 audio play failed — fall back to YouTube
-                        console.warn('HTML5 audio play() failed, falling back to YouTube IFrame');
-                        playViaYouTube(videoId);
-                    });
                 }
             } else {
                 // Audio URL extraction failed — fall back to YouTube IFrame

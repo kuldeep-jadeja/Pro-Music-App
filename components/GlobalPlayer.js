@@ -80,9 +80,9 @@ export default function GlobalPlayer() {
                 if (!wasPlayingRef.current) return;
 
                 if (activePlayerRef.current === 'audio' && audioElRef.current) {
-                    if (audioElRef.current.paused) {
-                        audioElRef.current.play().catch(() => { });
-                    }
+                    // Do not check `paused` because iOS might have suspended the audio
+                    // without firing the `pause` event immediately. Call play directly.
+                    audioElRef.current.play().catch(() => { });
                 } else if (activePlayerRef.current === 'youtube' && playerRef.current) {
                     try {
                         const state = playerRef.current.getPlayerState();
@@ -136,7 +136,7 @@ export default function GlobalPlayer() {
                 playsInline
                 webkitPlaysInline
                 preload="metadata"
-                style={{ position: 'fixed', width: 0, height: 0, opacity: 0 }}
+                style={{ position: 'fixed', width: '1px', height: '1px', opacity: 0.01, pointerEvents: 'none' }}
             />
 
             {/* YouTube IFrame — used on desktop (and as fallback on mobile) */}
