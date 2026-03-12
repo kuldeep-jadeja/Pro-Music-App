@@ -34,4 +34,8 @@ const TrackSchema = new mongoose.Schema(
 // uses MongoDB $text search.  The index consumed storage and slowed writes
 // for zero benefit.  Re-add if a search feature is implemented.
 
+// NOTE: Audio URLs are cached in Redis only (key: demus:audio-url:<videoId>, TTL 2h).
+// There is no MongoDB fallback for audio URLs. If Redis is unavailable, every request
+// triggers a live youtubei.js extraction. This is an intentional architecture decision
+// (audio URLs expire ~6h and are not worth persisting to MongoDB).
 export default mongoose.models.Track || mongoose.model('Track', TrackSchema);

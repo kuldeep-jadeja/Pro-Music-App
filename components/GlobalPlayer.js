@@ -113,8 +113,16 @@ export default function GlobalPlayer() {
     }, [playerRef, audioElRef, wasPlayingRef, activePlayerRef]);
 
     useEffect(() => {
+        const handlePageShow = (e) => {
+            if (e.persisted) handleVisibilityChange();
+        };
+
+        window.addEventListener('pageshow', handlePageShow);
         document.addEventListener('visibilitychange', handleVisibilityChange);
-        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+        return () => {
+            window.removeEventListener('pageshow', handlePageShow);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, [handleVisibilityChange]);
 
     return (

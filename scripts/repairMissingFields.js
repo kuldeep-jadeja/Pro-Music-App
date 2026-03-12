@@ -121,10 +121,58 @@ async function fetchFromItunes(track) {
 // NOTE: Spotify OG scrape (was Tier 2) removed — Spotify now serves a full
 //       Next.js SPA shell with no server-rendered OG meta tags.
 
-// ─── Tier 2: MusicBrainz + CoverArtArchive ───────────────────────────────────
+// ─── Tier 2: Deezer ──────────────────────────────────────────────────────────
+// Free, no API key required. Returns album title + cover art in a single call.
+async function fetchFromDeezer(track) {
+    const artist = track.artists?.[0] || '';
+    const cleanName = cleanTrackName(track.name);
+    const queries = cleanName !== track.name
+        ? [`${artist} ${cleanName}`, `${artist} ${track.name}`]
+        : [`${artist} ${track.name}`];
+
+    for (const queryStr of queries) {
+        const url = `https://api.deezer.com/search?q=${encodeURIComponent(queryStr)}&limit=5`;
+        try {
+            const res = await fetch(url, {
+                signal: AbortSignal.timeout(8000),
+                headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' },
+            });
+            if (!res.ok) continue;
+            const json = await res.json();
+
+            // Deezer silent rate-limit: HTTP 200 but data:[] with total>0.
+            // Bail out immediately — the window typically clears in a few minutes.
+            if (json.data?.length === 0 && (json.total ?? 0) > 0) {
+                console.warn('  [Deezer] Silent rate-limit detected — skipping Deezer tier for this run');
+                return false;
+            }
+
+            const hit = json.data?.[0];
+            if (!hit) continue;
+
+            if (!track.album || track.album === 'Unknown Album') {
+                track.album = hit.album?.title || track.album;
+            }
+            if (!track.albumImage && hit.album?.cover_xl) {
+                track.albumImage = hit.album.cover_xl;
+            } else if (!track.albumImage && hit.album?.cover_medium) {
+                track.albumImage = hit.album.cover_medium;
+            }
+
+            if (track.album && track.album !== 'Unknown Album' && track.albumImage) return true;
+        } catch (err) {
+            // non-fatal — move on to next query
+        }
+    }
+    return !!(track.album && track.album !== 'Unknown Album' && track.albumImage);
+}
+
+// ─── Tier 3: MusicBrainz + CoverArtArchive ───────────────────────────────────
 async function fetchFromMusicBrainz(track) {
     const artist = track.artists?.[0] || '';
-    const query = encodeURIComponent(`recording:"${track.name}" AND artist:"${artist}"`);
+    // Use cleaned name so "Song (feat. X)" → "Song" matches in MusicBrainz
+    const cleanedName = cleanTrackName(track.name);
+    const query = encodeURIComponent(`recording:"${cleanedName}" AND artist:"${artist}"`);
     const headers = { 'User-Agent': 'ProMusicApp/1.0 (https://github.com/pro-music-app)' };
     try {
         const res = await fetch(
@@ -185,13 +233,26 @@ async function enrichBatch(tracks) {
     if (afterItunes.length === 0) return;
     console.log(`  iTunes resolved ${tracks.length - afterItunes.length}/${tracks.length} — ${afterItunes.length} still need work`);
 
-    // Tier 2 — MusicBrainz (serialised, 1100 ms apart)
-    for (let i = 0; i < afterItunes.length; i++) {
-        await fetchFromMusicBrainz(afterItunes[i]);
-        if (i < afterItunes.length - 1) await sleep(1100);
+    // Tier 2 — Deezer (5 concurrent, 300 ms between batches, no API key)
+    for (let i = 0; i < afterItunes.length; i += 5) {
+        await Promise.all(afterItunes.slice(i, i + 5).map(fetchFromDeezer));
+        if (i + 5 < afterItunes.length) await sleep(300);
     }
-    const afterMB = afterItunes.filter(t => !t.albumImage || !t.album || t.album === 'Unknown Album');
-    console.log(`  MusicBrainz resolved ${afterItunes.length - afterMB.length}/${afterItunes.length} — ${afterMB.length} still unresolved`);
+
+    const afterDeezer = afterItunes.filter(t => !t.albumImage || !t.album || t.album === 'Unknown Album');
+    if (afterDeezer.length === 0) {
+        console.log(`  Deezer resolved all ${afterItunes.length} remaining tracks`);
+        return;
+    }
+    console.log(`  Deezer resolved ${afterItunes.length - afterDeezer.length}/${afterItunes.length} — ${afterDeezer.length} still need work`);
+
+    // Tier 3 — MusicBrainz (serialised, 1100 ms apart)
+    for (let i = 0; i < afterDeezer.length; i++) {
+        await fetchFromMusicBrainz(afterDeezer[i]);
+        if (i < afterDeezer.length - 1) await sleep(1100);
+    }
+    const afterMB = afterDeezer.filter(t => !t.albumImage || !t.album || t.album === 'Unknown Album');
+    console.log(`  MusicBrainz resolved ${afterDeezer.length - afterMB.length}/${afterDeezer.length} — ${afterMB.length} still unresolved`);
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────

@@ -37,7 +37,13 @@ const PlayerContext = createContext(null);
 function detectPreferredPlayer() {
     if (typeof window === 'undefined') return 'youtube';
 
-    const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    // iPadOS 13+ can send a macOS Safari UA when "Request Desktop Website" is on.
+    // Detect it via maxTouchPoints so it is still routed to the audio path.
+    const isIPadMasqueradingAsMac =
+        /Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1;
+
+    const isMobileDevice =
+        /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || isIPadMasqueradingAsMac;
     const isStandalone =
         window.matchMedia('(display-mode: standalone)').matches ||
         navigator.standalone === true;
@@ -49,14 +55,15 @@ export function PlayerProvider({ children }) {
     const playerRef = useRef(null);       // YT.Player instance
     const audioElRef = useRef(null);      // HTML5 <audio> element
     const intervalRef = useRef(null);
+    const audioRefreshTimerRef = useRef(null);  // proactive URL refresh timer
+    const wakeLockRef = useRef(null);     // Android Screen Wake Lock
     const activePlayerRef = useRef(null); // 'audio' | 'youtube' | null
     const currentVideoIdRef = useRef(null); // for fallback on audio error
 
-    // ── Device preference (computed once) ─────────────────────────────────
-    const preferredPlayerRef = useRef('youtube');
-    useEffect(() => {
-        preferredPlayerRef.current = detectPreferredPlayer();
-    }, []);
+    // ── Device preference (computed synchronously, SSR-safe) ──────────────
+    // Using a lazy initialiser avoids the one-render hydration gap where
+    // the ref was stuck at 'youtube' even on mobile.
+    const preferredPlayerRef = useRef(detectPreferredPlayer());
 
     // ── Playback state ────────────────────────────────────────────────────
     const [queue, setQueueState] = useState([]);
@@ -70,7 +77,10 @@ export function PlayerProvider({ children }) {
     const [isLoading, setIsLoading] = useState(false);
     const [isShuffleOn, setIsShuffleOn] = useState(false);
     const [repeatMode, setRepeatMode] = useState('off');
-    const [activePlayer, setActivePlayer] = useState(null); // 'audio' | 'youtube'
+    // Initialise to the device-preferred player so consumers never see null.
+    const [activePlayer, setActivePlayer] = useState(() =>
+        typeof window !== 'undefined' ? detectPreferredPlayer() : 'youtube'
+    );
 
     // ── Refs for stale-closure prevention ─────────────────────────────────
     const queueRef = useRef(queue);
@@ -90,9 +100,39 @@ export function PlayerProvider({ children }) {
     useEffect(() => { isShuffleOnRef.current = isShuffleOn; }, [isShuffleOn]);
     useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
 
-    // ── Accept audio element from GlobalPlayer ────────────────────────────
-    const setAudioElement = useCallback((el) => {
-        audioElRef.current = el;
+    // ── Screen Wake Lock (Android IFrame Fallback) ────────────────────────
+    const requestWakeLock = useCallback(async () => {
+        if (typeof navigator !== 'undefined' && 'wakeLock' in navigator) {
+            try {
+                if (!wakeLockRef.current) {
+                    wakeLockRef.current = await navigator.wakeLock.request('screen');
+                    // Re-acquire if visibility is lost and returned
+                    wakeLockRef.current.addEventListener('release', () => {
+                        wakeLockRef.current = null;
+                    });
+                }
+            } catch { /* Ignore rejection */ }
+        }
+    }, []);
+
+    const releaseWakeLock = useCallback(() => {
+        if (wakeLockRef.current) {
+            wakeLockRef.current.release().catch(() => {});
+            wakeLockRef.current = null;
+        }
+    }, []);
+
+    // Sync position state to OS once per play/pause/seek
+    const syncMediaSessionPosition = useCallback((time, dur) => {
+        if ('mediaSession' in navigator && navigator.mediaSession.metadata && dur > 0 && isFinite(dur)) {
+            try {
+                navigator.mediaSession.setPositionState({
+                    duration: dur,
+                    playbackRate: 1,
+                    position: Math.min(time, dur),
+                });
+            } catch { }
+        }
     }, []);
 
     // ── Time tracking ─────────────────────────────────────────────────────
@@ -115,31 +155,18 @@ export function PlayerProvider({ children }) {
             }
 
             setCurrentTime(time);
-
-            // Keep lock-screen position in sync
-            if ('mediaSession' in navigator && navigator.mediaSession.metadata) {
-                try {
-                    let dur = 0;
-                    if (activePlayerRef.current === 'audio' && audioElRef.current) {
-                        dur = audioElRef.current.duration || 0;
-                    } else if (activePlayerRef.current === 'youtube') {
-                        dur = playerRef.current?.getDuration?.() || 0;
-                    }
-                    if (dur > 0 && isFinite(dur)) {
-                        navigator.mediaSession.setPositionState({
-                            duration: dur,
-                            playbackRate: 1,
-                            position: Math.min(time, dur),
-                        });
-                    }
-                } catch { }
-            }
         }, 1000);
     }, [stopTimeTracking]);
 
     useEffect(() => {
-        return () => stopTimeTracking();
-    }, [stopTimeTracking]);
+        return () => {
+            stopTimeTracking();
+            if (audioRefreshTimerRef.current) {
+                clearTimeout(audioRefreshTimerRef.current);
+            }
+            releaseWakeLock();
+        };
+    }, [stopTimeTracking, releaseWakeLock]);
 
     // ── Initialize YouTube player ─────────────────────────────────────────
     const initPlayer = useCallback((containerId) => {
@@ -161,7 +188,10 @@ export function PlayerProvider({ children }) {
                     onReady: () => {
                         setIsReady(true);
                         playerRef.current.setVolume(volumeRef.current);
-                        registerAudioUnlock(() => playerRef.current);
+                        registerAudioUnlock(
+                            () => playerRef.current,
+                            () => activePlayerRef.current   // <— new arg
+                        );
 
                         // ── Media Session action handlers ──────────────────
                         // Registered ONCE. Each handler delegates to the
@@ -234,6 +264,7 @@ export function PlayerProvider({ children }) {
                             setDuration(dur);
                             startTimeTracking();
                             resumeSilentAudio();
+                            requestWakeLock();
 
                             if ('mediaSession' in navigator) {
                                 navigator.mediaSession.playbackState = 'playing';
@@ -251,6 +282,7 @@ export function PlayerProvider({ children }) {
                         } else if (state === window.YT.PlayerState.PAUSED) {
                             setIsPlaying(false);
                             stopTimeTracking();
+                            releaseWakeLock();
                             // Only clear wasPlaying if page is visible
                             // (OS-suspended pause should NOT clear the flag)
                             if (typeof document === 'undefined' || document.visibilityState === 'visible') {
@@ -286,7 +318,7 @@ export function PlayerProvider({ children }) {
                 }
             }, 100);
         }
-    }, [startTimeTracking, stopTimeTracking]);
+    }, [startTimeTracking, stopTimeTracking, requestWakeLock, releaseWakeLock]);
 
     // ── Shuffle helpers ────────────────────────────────────────────────────
     const buildShuffledOrder = useCallback((q, startIdx) => {
@@ -335,60 +367,66 @@ export function PlayerProvider({ children }) {
         try {
             if (playerRef.current?.pauseVideo) {
                 playerRef.current.pauseVideo();
+                // Release the video buffer when handing off to HTML5 audio.
+                // Safe to call — if playback returns to YT, loadVideoById re-buffers.
+                playerRef.current.stopVideo?.();
             }
         } catch { }
     }, []);
 
-    // ── Wire HTML5 <audio> events ─────────────────────────────────────────
-    const setupAudioEvents = useCallback((audioEl, videoId) => {
+    // ── Wire stable HTML5 <audio> events ONCE at mount ────────────────────
+    // Using addEventListener (not .on*) so handlers are never lost on
+    // re-assignment. These do not need per-track data.
+    const attachStaticAudioListeners = useCallback((audioEl) => {
         if (!audioEl) return;
 
-        audioEl.onplay = () => {
+        audioEl.addEventListener('play', () => {
             if (activePlayerRef.current !== 'audio') return;
             setIsPlaying(true);
             wasPlayingRef.current = true;
             startTimeTracking();
-            if ('mediaSession' in navigator) {
-                navigator.mediaSession.playbackState = 'playing';
-            }
-        };
+            requestWakeLock();
+            if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+            syncMediaSessionPosition(audioEl.currentTime || 0, audioEl.duration || 0);
+        });
 
-        audioEl.onpause = () => {
+        audioEl.addEventListener('pause', () => {
             if (activePlayerRef.current !== 'audio') return;
             setIsPlaying(false);
             stopTimeTracking();
+            releaseWakeLock();
             if (typeof document === 'undefined' || document.visibilityState === 'visible') {
                 wasPlayingRef.current = false;
             }
-            if ('mediaSession' in navigator) {
-                navigator.mediaSession.playbackState = 'paused';
-            }
-        };
+            if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+        });
 
-        audioEl.ontimeupdate = () => {
+        audioEl.addEventListener('timeupdate', () => {
             if (activePlayerRef.current !== 'audio') return;
             setCurrentTime(audioEl.currentTime || 0);
-        };
+        });
 
-        audioEl.onloadedmetadata = () => {
+        audioEl.addEventListener('loadedmetadata', () => {
             if (activePlayerRef.current !== 'audio') return;
             const dur = audioEl.duration;
-            if (dur && isFinite(dur)) {
-                setDuration(dur);
-            }
-        };
+            if (dur && isFinite(dur)) setDuration(dur);
+        });
 
-        audioEl.onended = () => {
+        audioEl.addEventListener('ended', () => {
             if (activePlayerRef.current !== 'audio') return;
             playNextRef.current?.();
-        };
+        });
+    }, [startTimeTracking, stopTimeTracking, requestWakeLock, releaseWakeLock, syncMediaSessionPosition]);
 
-        // ── TASK 7: Audio error → fallback to YouTube IFrame ──────────
+    // ── Wire HTML5 <audio> events ─────────────────────────────────────────
+    // Now only sets onerror (needs currentVideoIdRef for fallback).
+    const setupAudioEvents = useCallback((audioEl) => {
+        if (!audioEl) return;
+
+        // Per-track onerror — captures currentVideoIdRef via closure
         audioEl.onerror = () => {
             if (activePlayerRef.current !== 'audio') return;
             console.warn('HTML5 audio error — falling back to YouTube IFrame');
-
-            // Fall back to YouTube IFrame for the current video
             const fallbackId = currentVideoIdRef.current;
             if (fallbackId && playerRef.current) {
                 stopAudioPlayer();
@@ -399,11 +437,16 @@ export function PlayerProvider({ children }) {
                     try { playerRef.current.playVideo(); } catch { }
                 }, 200);
             } else {
-                // No fallback possible — advance to next track
                 playNextRef.current?.();
             }
         };
-    }, [startTimeTracking, stopTimeTracking, stopAudioPlayer]);
+    }, [stopAudioPlayer]);
+
+    // ── Accept audio element from GlobalPlayer ────────────────────────────
+    const setAudioElement = useCallback((el) => {
+        audioElRef.current = el;
+        attachStaticAudioListeners(el);
+    }, [attachStaticAudioListeners]);
 
     // ── Match a single track via the API ──────────────────────────────────
     const matchTrack = useCallback(async (track) => {
@@ -437,7 +480,7 @@ export function PlayerProvider({ children }) {
             const res = await fetch(`/api/audio-url/${videoId}`);
             if (res.ok) {
                 const data = await res.json();
-                return data.audioUrl || null;
+                return data.audioUrl ? data : null; // return full { audioUrl, expiresAt }
             }
         } catch (err) {
             console.warn('Audio URL fetch failed:', err);
@@ -462,6 +505,11 @@ export function PlayerProvider({ children }) {
 
     // ── Play a track (HYBRID routing) ─────────────────────────────────────
     const playTrack = useCallback(async (track, index, newQueue) => {
+        // Cancel any pending URL refresh from the previous track
+        if (audioRefreshTimerRef.current) {
+            clearTimeout(audioRefreshTimerRef.current);
+            audioRefreshTimerRef.current = null;
+        }
         if (newQueue) setQueueState(newQueue);
 
         setCurrentTrack(track);
@@ -503,7 +551,8 @@ export function PlayerProvider({ children }) {
 
         if (preferred === 'audio' && audioElRef.current) {
             // ── Mobile / PWA path: try server-extracted audio URL ──
-            const audioUrl = await fetchAudioUrl(videoId);
+            const result = await fetchAudioUrl(videoId);
+            const audioUrl = result?.audioUrl;
 
             if (audioUrl) {
                 stopYouTubePlayer();
@@ -511,10 +560,30 @@ export function PlayerProvider({ children }) {
 
                 activePlayerRef.current = 'audio';
                 setActivePlayer('audio');
-                setupAudioEvents(audioElRef.current, videoId);
+                setupAudioEvents(audioElRef.current); // sets onerror only
 
-                audioElRef.current.src = audioUrl;
+                audioElRef.current.src = result.audioUrl;
                 audioElRef.current.volume = volumeRef.current / 100;
+
+                // Schedule proactive refresh before CDN URL expires
+                if (result.expiresAt) {
+                    const msUntilRefresh = result.expiresAt - Date.now() - 5 * 60 * 1000;
+                    if (msUntilRefresh > 0) {
+                        audioRefreshTimerRef.current = setTimeout(async () => {
+                            if (activePlayerRef.current !== 'audio') return;
+                            const refreshed = await fetchAudioUrl(videoId);
+                            if (refreshed?.audioUrl && audioElRef.current) {
+                                const pos = audioElRef.current.currentTime;
+                                const wasPaused = audioElRef.current.paused;
+                                audioElRef.current.src = refreshed.audioUrl;
+                                audioElRef.current.currentTime = pos;
+                                if (!wasPaused) {
+                                    audioElRef.current.play().catch(() => {});
+                                }
+                            }
+                        }, msUntilRefresh);
+                    }
+                }
 
                 const playPromise = audioElRef.current.play();
                 if (playPromise && typeof playPromise.catch === 'function') {
@@ -550,7 +619,7 @@ export function PlayerProvider({ children }) {
             shuffledOrderRef.current = order;
             shufflePositionRef.current = 0;
         }
-    }, [matchTrack, fetchAudioUrl, playViaYouTube, stopYouTubePlayer, setupAudioEvents, buildShuffledOrder]);
+    }, [matchTrack, fetchAudioUrl, playViaYouTube, stopYouTubePlayer, setupAudioEvents, attachStaticAudioListeners, buildShuffledOrder]);
 
     // ── Toggle play / pause ───────────────────────────────────────────────
     const togglePlay = useCallback(() => {
@@ -579,11 +648,13 @@ export function PlayerProvider({ children }) {
         if (activePlayerRef.current === 'audio' && audioElRef.current) {
             audioElRef.current.currentTime = seconds;
             setCurrentTime(seconds);
+            syncMediaSessionPosition(seconds, audioElRef.current.duration || 0);
         } else if (playerRef.current) {
             playerRef.current.seekTo(seconds, true);
             setCurrentTime(seconds);
+            syncMediaSessionPosition(seconds, playerRef.current.getDuration?.() || 0);
         }
-    }, []);
+    }, [syncMediaSessionPosition]);
 
     // ── Volume ────────────────────────────────────────────────────────────
     const setVolume = useCallback((val) => {
@@ -625,18 +696,14 @@ export function PlayerProvider({ children }) {
         }
 
         for (let i = idx + 1; i < q.length; i++) {
-            if (q[i].youtubeVideoId) {
-                playTrack(q[i], i);
-                return;
-            }
+            playTrack(q[i], i);
+            return;
         }
 
         if (repeat === 'all') {
             for (let i = 0; i < idx; i++) {
-                if (q[i].youtubeVideoId) {
-                    playTrack(q[i], i);
-                    return;
-                }
+                playTrack(q[i], i);
+                return;
             }
         }
     }, [playTrack]);
@@ -659,10 +726,8 @@ export function PlayerProvider({ children }) {
         if (!q || idx <= 0) return;
 
         for (let i = idx - 1; i >= 0; i--) {
-            if (q[i].youtubeVideoId) {
-                playTrack(q[i], i);
-                return;
-            }
+            playTrack(q[i], i);
+            return;
         }
     }, [playTrack]);
 
@@ -709,10 +774,6 @@ export function PlayerProvider({ children }) {
         setQueue,
         toggleShuffle,
         cycleRepeat,
-
-        // Modes
-        isShuffleOn,
-        repeatMode,
     };
 
     return (
