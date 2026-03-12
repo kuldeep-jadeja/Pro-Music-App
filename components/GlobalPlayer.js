@@ -75,8 +75,8 @@ export default function GlobalPlayer() {
             resumeSilentAudio();
             resumeAudioContext();
 
-            // Resume playback if it was interrupted by the OS
-            setTimeout(() => {
+            {/* Resume playback if it was interrupted by the OS */}
+            const resumePlayback = () => {
                 if (!wasPlayingRef.current) return;
 
                 if (activePlayerRef.current === 'audio' && audioElRef.current) {
@@ -91,7 +91,10 @@ export default function GlobalPlayer() {
                         }
                     } catch { }
                 }
-            }, 300);
+            };
+
+            // On iOS, calling play() immediately after visibility returns is more reliable.
+            resumePlayback();
         } else {
             // Page going to background — record current state
             try {
@@ -131,7 +134,7 @@ export default function GlobalPlayer() {
             <audio
                 ref={htmlAudioRef}
                 playsInline
-                webkit-playsinline=""
+                webkitPlaysInline
                 preload="metadata"
                 style={{ position: 'fixed', width: 0, height: 0, opacity: 0 }}
             />
