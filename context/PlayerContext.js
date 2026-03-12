@@ -190,7 +190,8 @@ export function PlayerProvider({ children }) {
                         playerRef.current.setVolume(volumeRef.current);
                         registerAudioUnlock(
                             () => playerRef.current,
-                            () => activePlayerRef.current   // <— new arg
+                            () => activePlayerRef.current,
+                            () => audioElRef.current
                         );
 
                         // ── Media Session action handlers ──────────────────
@@ -505,6 +506,11 @@ export function PlayerProvider({ children }) {
 
     // ── Play a track (HYBRID routing) ─────────────────────────────────────
     const playTrack = useCallback(async (track, index, newQueue) => {
+        // Prime the audio element immediately on user click to satisfy iOS/WebKit
+        if (audioElRef.current) {
+            try { audioElRef.current.play().then(() => audioElRef.current.pause()).catch(() => { }); } catch { }
+        }
+
         // Cancel any pending URL refresh from the previous track
         if (audioRefreshTimerRef.current) {
             clearTimeout(audioRefreshTimerRef.current);
