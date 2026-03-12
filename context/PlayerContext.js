@@ -527,6 +527,8 @@ export function PlayerProvider({ children }) {
             if (!audioElRef.current.src || audioElRef.current.src.startsWith('data:')) {
                 audioElRef.current.src = SILENT_MP3;
             }
+            // Loop it so it doesn't end while we wait for the network request!
+            audioElRef.current.loop = true;
             audioElRef.current.play().catch(() => { });
         }
 
@@ -593,6 +595,7 @@ export function PlayerProvider({ children }) {
                 if (audioElRef.current) audioElRef.current._isTrackLoading = false;
 
                 audioElRef.current.src = result.audioUrl;
+                audioElRef.current.loop = false; // Important: remove the loop!
                 audioElRef.current.volume = volumeRef.current / 100;
                 audioElRef.current.load(); // Explicitly call load() for iOS reliability
 
