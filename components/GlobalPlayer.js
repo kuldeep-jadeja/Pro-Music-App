@@ -102,6 +102,8 @@ export default function GlobalPlayer() {
                     if (!audioElRef.current.paused) {
                         wasPlayingRef.current = true;
                     }
+                    // IMPORTANT iOS FIX: Do NOT pause the main audio element when visibility changes.
+                    // If we are waiting for a redirect/stream, pausing it will lose background privileges!
                 } else if (activePlayerRef.current === 'youtube' && playerRef.current) {
                     const state = playerRef.current.getPlayerState();
                     if (state === 1 /* PLAYING */) {
@@ -135,7 +137,7 @@ export default function GlobalPlayer() {
                 ref={htmlAudioRef}
                 playsInline
                 webkitPlaysInline
-                preload="metadata"
+                preload="auto"
                 style={{ position: 'fixed', width: '1px', height: '1px', opacity: 0.01, pointerEvents: 'none' }}
             />
 

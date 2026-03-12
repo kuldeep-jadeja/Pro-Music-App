@@ -514,24 +514,6 @@ export function PlayerProvider({ children }) {
 
     // ── Play a track (HYBRID routing) ─────────────────────────────────────
     const playTrack = useCallback(async (track, index, newQueue) => {
-        // Prime the audio element immediately on user click to satisfy iOS/WebKit.
-        // We MUST start playing something (even silence) BEFORE the first await
-        // to keep the user gesture alive for the subsequent async play() call.
-        if (audioElRef.current) {
-            audioElRef.current._isTrackLoading = true; // Flag for registerAudioUnlock
-
-            // Set source to SILENT_MP3 and play it.
-            // DO NOT PAUSE IT. iOS requires the element to be actively "playing"
-            // a source in order to maintain background capability when the
-            // asynchronous URL fetch finishes and we swap the src.
-            if (!audioElRef.current.src || audioElRef.current.src.startsWith('data:')) {
-                audioElRef.current.src = SILENT_MP3;
-            }
-            // Loop it so it doesn't end while we wait for the network request!
-            audioElRef.current.loop = true;
-            audioElRef.current.play().catch(() => { });
-        }
-
         // Cancel any pending URL refresh from the previous track
         if (audioRefreshTimerRef.current) {
             clearTimeout(audioRefreshTimerRef.current);
@@ -543,13 +525,60 @@ export function PlayerProvider({ children }) {
         setCurrentIndex(index);
         setIsLoading(true);
 
-        const videoId = await matchTrack(track);
+        // ── HYBRID DECISION ───────────────────────────────────────
+        const preferred = preferredPlayerRef.current;
+
+        if (preferred === 'audio') {
+            stopYouTubePlayer();
+            activePlayerRef.current = 'audio';
+            setActivePlayer('audio');
+            if (audioElRef.current) {
+                setupAudioEvents(audioElRef.current);
+                audioElRef.current._isTrackLoading = true;
+
+                // BULLETPROOF iOS BACKGROUND AUDIO:
+                // Do NOT use await before setting the src and calling play().
+                // Set the src immediately to a proxy endpoint that will hold the
+                // connection open while extracting the URL, then HTTP 302 redirect.
+                // This guarantees the network play request is tied to the synchronous user gesture.
+                const sourceUrl = track.youtubeVideoId
+                    ? `/api/stream/audio?videoId=${track.youtubeVideoId}`
+                    : `/api/stream/audio?trackId=${track.id || track._id}`;
+
+                audioElRef.current.src = sourceUrl;
+                audioElRef.current.loop = false;
+                audioElRef.current.volume = volumeRef.current / 100;
+                audioElRef.current.load();
+
+                const playPromise = audioElRef.current.play();
+                if (playPromise && typeof playPromise.catch === 'function') {
+                    playPromise.catch((err) => {
+                        console.warn('HTML5 audio play() initial fail, retrying...', err);
+                        setTimeout(() => {
+                            if (audioElRef.current && audioElRef.current.src.includes('/api/stream/audio')) {
+                                audioElRef.current.play().catch(finalErr => {
+                                    console.warn('HTML5 audio play() failed finally:', finalErr);
+                                    if (track.youtubeVideoId) playViaYouTube(track.youtubeVideoId);
+                                });
+                            }
+                        }, 100);
+                    });
+                }
+            }
+        }
+
+        // We still need to run matchTrack in the background if we don't have the videoId
+        // so we can set up MediaSession metadata and fallback logic.
+        let videoId = track.youtubeVideoId;
+        if (!videoId) {
+            videoId = await matchTrack(track);
+        }
+
         if (!videoId) {
             setIsLoading(false);
             return;
         }
 
-        // Store videoId for audio error fallback
         currentVideoIdRef.current = videoId;
 
         // ── Media Session metadata (set before playback) ──────────
@@ -571,63 +600,26 @@ export function PlayerProvider({ children }) {
             });
         }
 
-        // ── HYBRID DECISION ───────────────────────────────────────
-        // Desktop → always use YouTube IFrame (zero bandwidth)
-        // Mobile / PWA → try HTML5 <audio> first, fallback to IFrame
-        const preferred = preferredPlayerRef.current;
-
         if (preferred === 'audio' && audioElRef.current) {
-            // ── Mobile / PWA path: try server-extracted audio URL ──
+            // We already set the proxy URL synchronously above.
+            // Just clear the loading flag.
+            audioElRef.current._isTrackLoading = false;
+            setIsLoading(false);
 
-            const result = await fetchAudioUrl(videoId);
-            const audioUrl = result?.audioUrl;
-
-            if (audioUrl) {
-                stopYouTubePlayer();
-                setIsLoading(false);
-
-                activePlayerRef.current = 'audio';
-                setActivePlayer('audio');
-                setupAudioEvents(audioElRef.current); // sets onerror only
-
-                // Clear the loading flag once we have the real URL and are about to play.
-                // This ensures subsequent MediaSession actions work correctly.
-                if (audioElRef.current) audioElRef.current._isTrackLoading = false;
-
-                audioElRef.current.src = result.audioUrl;
-                audioElRef.current.loop = false; // Important: remove the loop!
-                audioElRef.current.volume = volumeRef.current / 100;
-                audioElRef.current.load(); // Explicitly call load() for iOS reliability
-
-                // Wait slightly before playing the real URL to allow load() to process
-                const playPromise = audioElRef.current.play();
-                if (playPromise && typeof playPromise.catch === 'function') {
-                    playPromise.catch((err) => {
-                        // If it fails (e.g., interrupted), wait a tiny bit and try again,
-                        // as iOS sometimes throws an abort error if the src swaps too quickly.
-                        console.warn('HTML5 audio play() initial fail, retrying...', err);
-                        setTimeout(() => {
-                            if (audioElRef.current && audioElRef.current.src === result.audioUrl) {
-                                audioElRef.current.play().catch(finalErr => {
-                                    console.warn('HTML5 audio play() failed finally:', finalErr);
-                                    playViaYouTube(videoId);
-                                });
-                            }
-                        }, 100);
-                    });
-                }
-
-                // Schedule proactive refresh before CDN URL expires
-                if (result.expiresAt) {
+            // Proactively refresh before CDN URL expires
+            // Since we use a proxy now, we don't know the exact expiry of the redirected URL.
+            // We can fetch the JSON endpoint in the background just to get the expiry.
+            fetchAudioUrl(videoId).then(result => {
+                if (result?.expiresAt) {
                     const msUntilRefresh = result.expiresAt - Date.now() - 5 * 60 * 1000;
                     if (msUntilRefresh > 0) {
-                        audioRefreshTimerRef.current = setTimeout(async () => {
+                        audioRefreshTimerRef.current = setTimeout(() => {
                             if (activePlayerRef.current !== 'audio') return;
-                            const refreshed = await fetchAudioUrl(videoId);
-                            if (refreshed?.audioUrl && audioElRef.current) {
+                            if (audioElRef.current) {
                                 const pos = audioElRef.current.currentTime;
                                 const wasPaused = audioElRef.current.paused;
-                                audioElRef.current.src = refreshed.audioUrl;
+                                // Hitting the proxy again will issue a new redirect
+                                audioElRef.current.src = `/api/stream/audio?videoId=${videoId}&t=${Date.now()}`;
                                 audioElRef.current.currentTime = pos;
                                 if (!wasPaused) {
                                     audioElRef.current.play().catch(() => {});
@@ -636,11 +628,8 @@ export function PlayerProvider({ children }) {
                         }, msUntilRefresh);
                     }
                 }
-            } else {
-                // Audio URL extraction failed — fall back to YouTube IFrame
-                setIsLoading(false);
-                playViaYouTube(videoId);
-            }
+            }).catch(() => {});
+
         } else {
             // ── Desktop path: use YouTube IFrame directly ──────────
             setIsLoading(false);
