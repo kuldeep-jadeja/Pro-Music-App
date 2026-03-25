@@ -182,6 +182,33 @@ let innertubeInstance = null;
 let innertubeCreatedAt = 0;
 const INNERTUBE_MAX_AGE_MS = 30 * 60 * 1000; // recreate every 30 min
 
+// ─── Rate Limiting Protection ─────────────────────────────
+// Prevent YouTube from detecting burst patterns
+let lastRequestTime = 0;
+const MIN_REQUEST_INTERVAL_MS = 1000; // Minimum 1 second between requests
+const requestQueue = [];
+let isProcessingQueue = false;
+
+// Exponential backoff for rate limit errors
+let backoffDelay = 0;
+const MAX_BACKOFF_DELAY = 30000; // Max 30 seconds
+
+async function waitForRateLimit() {
+    const now = Date.now();
+    const timeSinceLastRequest = now - lastRequestTime;
+    
+    // Add backoff delay if we're being rate limited
+    const requiredDelay = Math.max(MIN_REQUEST_INTERVAL_MS, backoffDelay);
+    
+    if (timeSinceLastRequest < requiredDelay) {
+        const waitTime = requiredDelay - timeSinceLastRequest;
+        log(`⏱️ Rate limiting: waiting ${waitTime}ms before next request`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+    
+    lastRequestTime = Date.now();
+}
+
 async function getInnertube(forceRefresh = false) {
     const now = Date.now();
     const isStale = now - innertubeCreatedAt > INNERTUBE_MAX_AGE_MS;
@@ -192,9 +219,13 @@ async function getInnertube(forceRefresh = false) {
 
     log('Creating new Innertube instance...');
 
+    // Rotate between client types to avoid detection
+    const clientTypes = ['ANDROID', 'IOS'];
+    const randomClient = clientTypes[Math.floor(Math.random() * clientTypes.length)];
+
     innertubeInstance = await Innertube.create({
-        // Use ANDROID client to bypass bot protection and get direct URLs
-        client_type: 'ANDROID',
+        // Rotate client type to avoid detection patterns
+        client_type: randomClient,
         // Cache the player JS to disk so we don't re-download it
         // on every cold start. This is critical for performance.
         cache: new UniversalCache(true, './.innertube-cache'),
@@ -203,7 +234,7 @@ async function getInnertube(forceRefresh = false) {
     });
 
     innertubeCreatedAt = now;
-    log('Innertube instance created.');
+    log(`Innertube instance created with ${randomClient} client.`);
 
     return innertubeInstance;
 }
@@ -272,9 +303,12 @@ export default async function handler(req, res) {
     // ──────────────────────────────────────────────────────
     let lastError = null;
 
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 3; attempt++) {
         try {
-            // On retry (attempt 1), force-refresh the Innertube instance
+            // Enforce rate limiting between requests
+            await waitForRateLimit();
+            
+            // On retry (attempt 1+), force-refresh the Innertube instance
             // in case the player JS / decipher algorithm is stale
             const yt = await getInnertube(attempt > 0);
 
@@ -387,6 +421,9 @@ export default async function handler(req, res) {
                 if (isDev) console.error('[audio-url] Redis write error:', redisErr.message);
             }
 
+            // Reset backoff on success
+            backoffDelay = 0;
+            
             res.setHeader('X-Cache', 'MISS');
             return res.status(200).json(payload);
 
@@ -394,20 +431,40 @@ export default async function handler(req, res) {
             lastError = err;
             log(`❌ Attempt ${attempt + 1} failed for ${videoId}: ${err.message}`);
 
-            // Only retry if it looks like a decipher / player issue
+            // Check if this is a rate limit / socket error
+            const isRateLimited = 
+                err.message?.includes('SocketError') ||
+                err.message?.includes('other side closed') ||
+                err.message?.includes('ECONNRESET') ||
+                err.message?.includes('fetch failed') ||
+                err.code === 'UND_ERR_SOCKET';
+
+            if (isRateLimited) {
+                // Exponential backoff: 2s, 4s, 8s, etc.
+                backoffDelay = Math.min(
+                    (backoffDelay || 1000) * 2, 
+                    MAX_BACKOFF_DELAY
+                );
+                log(`⚠️ Rate limit detected! Setting backoff to ${backoffDelay}ms`);
+            }
+
+            // Only retry if it looks like a retryable issue
             const isRetryable =
                 err.message?.includes('decipher') ||
                 err.message?.includes('signature') ||
                 err.message?.includes('player') ||
                 err.message?.includes('No streaming data') ||
-                err.message?.includes('Could not extract');
+                err.message?.includes('Could not extract') ||
+                isRateLimited;
 
-            if (attempt === 0 && isRetryable) {
-                log('Retrying with fresh Innertube instance...');
+            if (attempt < 2 && isRetryable) {
+                const retryDelay = Math.min(1000 * Math.pow(2, attempt), 5000);
+                log(`Retrying in ${retryDelay}ms with fresh Innertube instance...`);
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
                 continue;
             }
 
-            // Non-retryable or second attempt — break out
+            // Non-retryable or final attempt — break out
             break;
         }
     }
@@ -435,6 +492,13 @@ export default async function handler(req, res) {
         return res.status(503).json({
             error: 'YouTube bot detection triggered. Retry later.',
             retryAfter: 60,
+            videoId,
+        });
+    }
+    if (msg.includes('SocketError') || msg.includes('other side closed') || msg.includes('fetch failed')) {
+        return res.status(503).json({
+            error: 'YouTube temporarily unavailable (rate limited). Please wait a moment and try again.',
+            retryAfter: Math.ceil(backoffDelay / 1000) || 5,
             videoId,
         });
     }
