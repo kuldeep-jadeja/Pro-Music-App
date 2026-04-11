@@ -42,6 +42,8 @@ export default function AppLayout({ children }) {
 
     const appTrackId = (currentTrack?._id ?? currentTrack?.id)?.toString() ?? null;
     const playerTrackId = (playerCtxTrack?._id ?? playerCtxTrack?.id)?.toString() ?? null;
+    const playerTrackForUi = playerCtxTrack || currentTrack;
+    const playerIndexForUi = playerCtxTrack ? playerCtxIndex : currentIndex;
 
     // AppContext → PlayerContext: relay user track selection to the shared player
     useEffect(() => {
@@ -106,9 +108,9 @@ export default function AppLayout({ children }) {
 
             <div className={styles.playerSlot}>
                 <Player
-                    track={currentTrack}
+                    track={playerTrackForUi}
                     playlist={tracks}
-                    currentIndex={currentIndex}
+                    currentIndex={playerIndexForUi}
                     playlistId={activePlaylist?.id}
                     onOpenSheet={() => setSheetOpen(true)}
                 />
