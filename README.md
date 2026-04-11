@@ -59,6 +59,13 @@ Demus lets you paste any **public Spotify playlist URL** and instantly stream ev
                                       └─────────────────────┘
 ```
 
+### Canonical global playback flow
+
+- `pages/_app.js` mounts `PlayerProvider` at the app root and renders `GlobalPlayer` once, so playback survives route changes.
+- `context/PlayerContext.js` owns YouTube IFrame initialization/lifecycle (`initPlayer`) and all playback state/actions.
+- `lib/AppContext.js` routes UI track selection into `playTrack(track, index, tracks)`.
+- `components/Player.js` renders playback controls and metadata UI only; it does not create/manage the iframe.
+
 ---
 
 ## 🚀 Quick Start
@@ -162,8 +169,8 @@ User pastes Spotify URL
 ```
 Pro-Music-App/
 ├── pages/
-│   ├── _app.js              # App shell, SW registration, GlobalPlayer
-│   ├── _document.js         # Custom HTML doc (YT IFrame API script load)
+│   ├── _app.js              # App shell, SW registration, PlayerProvider, GlobalPlayer
+│   ├── _document.js         # Custom HTML doc (PWA + mobile meta)
 │   ├── index.js             # Home page: QuickPicks + playlist grid
 │   ├── login.js             # Login page
 │   ├── signup.js            # Signup page
@@ -181,7 +188,7 @@ Pro-Music-App/
 ├── components/
 │   ├── layout/              # AppLayout, Sidebar, Navbar, NowPlayingPanel,
 │   │                        # MobileTabBar, MobileNowPlayingSheet
-│   ├── Player.js            # Bottom player bar
+│   ├── Player.js            # Bottom playback controls UI (no iframe lifecycle)
 │   ├── GlobalPlayer.js      # Persistent hidden YouTube iframe
 │   ├── ImportForm.js
 │   ├── TrackList.js
@@ -203,10 +210,10 @@ Pro-Music-App/
 │   ├── youtubeMatcher.js    # Lightweight single-track matcher
 │   ├── trackFingerprint.js  # Dedup normalization
 │   ├── unlockAudio.js       # iOS Safari audio unlock
-│   └── AppContext.js        # Auth, playlists, import tracking
+│   └── AppContext.js        # Auth/library state + track selection routing to playTrack
 │
 ├── context/
-│   └── PlayerContext.js     # YT player state & controls
+│   └── PlayerContext.js     # YT iframe lifecycle + global playback state/actions
 │
 ├── models/
 │   ├── User.js              # email, passwordHash
