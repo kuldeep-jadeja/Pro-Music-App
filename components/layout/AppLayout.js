@@ -30,35 +30,19 @@ export default function AppLayout({ children }) {
     const [sheetOpen, setSheetOpen] = useState(false);
 
     const {
-        playTrack,
         currentTrack: playerCtxTrack,
         currentIndex: playerCtxIndex,
     } = usePlayer();
 
-    const tracksRef = useRef(tracks);
-    useEffect(() => { tracksRef.current = tracks; }, [tracks]);
-    const lastAppTrackId = useRef(null);
     const lastPlayerTrackId = useRef(null);
-
-    const appTrackId = (currentTrack?._id ?? currentTrack?.id)?.toString() ?? null;
     const playerTrackId = (playerCtxTrack?._id ?? playerCtxTrack?.id)?.toString() ?? null;
     const playerTrackForUi = playerCtxTrack || currentTrack;
     const playerIndexForUi = playerCtxTrack ? playerCtxIndex : currentIndex;
-
-    // AppContext → PlayerContext: relay user track selection to the shared player
-    useEffect(() => {
-        if (!appTrackId || appTrackId === lastAppTrackId.current) return;
-        lastAppTrackId.current = appTrackId;
-        lastPlayerTrackId.current = appTrackId;
-        playTrack(currentTrack, currentIndex, tracksRef.current);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [appTrackId]);
 
     // PlayerContext → AppContext: keep UI in sync when track auto-advances
     useEffect(() => {
         if (!playerTrackId || playerTrackId === lastPlayerTrackId.current) return;
         lastPlayerTrackId.current = playerTrackId;
-        lastAppTrackId.current = playerTrackId;
         handleTrackChange(playerCtxTrack, playerCtxIndex);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [playerTrackId]);
