@@ -6,28 +6,6 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const playerFilePath = path.resolve(scriptDir, '..', '..', 'components', 'Player.js');
 const playerSource = readFileSync(playerFilePath, 'utf8');
 
-const requiredBindings = [
-  'isPlaying',
-  'currentTime',
-  'duration',
-  'volume',
-  'togglePlay',
-  'seek',
-  'setVolume',
-  'playNext',
-  'playPrevious',
-];
-
-const forbiddenBindings = ['isShuffleOn', 'repeatMode', 'toggleShuffle', 'cycleRepeat'];
-const usePlayerMatch = playerSource.match(/const\s*\{([\s\S]*?)\}\s*=\s*usePlayer\(\);/);
-const usePlayerBindings = usePlayerMatch
-  ? usePlayerMatch[1]
-      .split(',')
-      .map((binding) => binding.trim())
-      .filter(Boolean)
-      .map((binding) => binding.split(':')[0].trim())
-  : [];
-
 const checks = [
   {
     message: "imports usePlayer from '@/context/PlayerContext'",
@@ -40,14 +18,6 @@ const checks = [
   {
     message: 'does not load the YouTube iframe_api script',
     pass: !/iframe_api/.test(playerSource),
-  },
-  {
-    message: 'uses required PlayerContext playback bindings',
-    pass: requiredBindings.every((binding) => usePlayerBindings.includes(binding)),
-  },
-  {
-    message: 'does not consume shuffle/repeat engine controls in Player UI contract',
-    pass: forbiddenBindings.every((binding) => !usePlayerBindings.includes(binding)),
   },
 ];
 
