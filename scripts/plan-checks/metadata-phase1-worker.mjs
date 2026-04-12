@@ -1,13 +1,27 @@
 import fs from 'node:fs';
 
 const workerPath = 'workers/metadataWorker.js';
+const packagePath = 'package.json';
 
 if (!fs.existsSync(workerPath)) {
     console.error(`Worker contract failed: missing ${workerPath}`);
     process.exit(1);
 }
+if (!fs.existsSync(packagePath)) {
+    console.error(`Worker contract failed: missing ${packagePath}`);
+    process.exit(1);
+}
 
 const src = fs.readFileSync(workerPath, 'utf8');
+const pkgRaw = fs.readFileSync(packagePath, 'utf8');
+let pkg;
+
+try {
+    pkg = JSON.parse(pkgRaw);
+} catch (err) {
+    console.error('Worker contract failed: package.json is invalid JSON');
+    process.exit(1);
+}
 
 const checks = [
     [
@@ -21,6 +35,11 @@ const checks = [
     [
         'BLPOP loop',
         /while\s*\(\s*true\s*\)[\s\S]*redis\.blpop\s*\(\s*QUEUE_KEY\s*,\s*[A-Za-z0-9_]+\s*\)/.test(src),
+    ],
+    [
+        'package script metadata:worker',
+        typeof pkg?.scripts?.['metadata:worker'] === 'string' &&
+        /workers\/metadataWorker\.js/.test(pkg.scripts['metadata:worker']),
     ],
 ];
 
