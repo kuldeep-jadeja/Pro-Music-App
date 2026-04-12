@@ -43,6 +43,10 @@ const checks = [
         /\.\.\.\s*\(\s*context\s*\?\?\s*\{\s*\}\s*\)/.test(src),
     ],
     [
+        'payload keeps canonical ids over context',
+        /\.\.\.\s*\(\s*context\s*\?\?\s*\{\s*\}\s*\)\s*,[\s\S]*?trackId\s*,[\s\S]*?spotifyId\s*:\s*track\?\.spotifyId\s*\?\?\s*null/.test(src),
+    ],
+    [
         'payload does not nest context object',
         !/\bcontext\s*,/.test(src),
     ],
