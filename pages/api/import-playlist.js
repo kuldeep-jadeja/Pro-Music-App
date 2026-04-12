@@ -1,4 +1,5 @@
 import { connectDB } from '@/lib/mongodb';
+import enqueueMetadataBatch from '@/lib/metadataQueue';
 import { withRateLimit } from '@/lib/rateLimit';
 import { requireAuth } from '@/lib/requireAuth';
 import {
@@ -140,6 +141,13 @@ async function handler(req, res) {
             },
         });
 
+        const context = {
+            source: 'import-playlist',
+            playlistId: playlist._id?.toString?.() ?? playlist._id,
+            spotifyPlaylistId: playlistId,
+            userId: req.user._id?.toString?.() ?? req.user._id,
+        };
+
         // 7a. Background album/art enrichment — fire-and-forget.
         //     Runs the 3-tier pipeline (iTunes → Spotify OG → MusicBrainz) for
         //     any track still missing album name or cover art.
@@ -168,6 +176,11 @@ async function handler(req, res) {
                 );
             }
         }
+
+        // 7c. Metadata queue enqueue — fire-and-forget.
+        enqueueMetadataBatch(rawTracks, context).catch((err) =>
+            console.error('[MetadataQueue] Failed to enqueue metadata batch from import:', err.message)
+        );
     } catch (err) {
         console.error('Import playlist error:', err.message);
 
