@@ -42,10 +42,13 @@ const TrackSchema = new mongoose.Schema(
         metadataAttempts: {
             type: Number,
             default: 0,
+            min: 0,
         },
         genreConfidence: {
             type: Number,
             default: 0,
+            min: 0,
+            max: 1,
         },
         metadataFingerprint: {
             type: String,
