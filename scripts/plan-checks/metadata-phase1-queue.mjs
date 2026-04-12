@@ -8,6 +8,11 @@ if (!fs.existsSync(queueHelperPath)) {
 }
 
 const src = fs.readFileSync(queueHelperPath, 'utf8');
+const batchMatch = src.match(
+    /export\s+async\s+function\s+enqueueMetadataBatch\s*\(\s*tracks\s*,\s*context\s*\)\s*\{[\s\S]*?\n\}/
+);
+const batchSrc = batchMatch?.[0] ?? '';
+
 const checks = [
     [
         'getRedis import',
@@ -24,6 +29,30 @@ const checks = [
     [
         'enqueueMetadataBatch export',
         /export\s+async\s+function\s+enqueueMetadataBatch\s*\(\s*tracks\s*,\s*context\s*\)/.test(src),
+    ],
+    [
+        'payload includes albumImage',
+        /albumImage\s*:\s*track\?\.albumImage\s*\?\?\s*null/.test(src),
+    ],
+    [
+        'payload includes queuedAt',
+        /queuedAt\s*:\s*context\?\.queuedAt\s*\?\?\s*new\s+Date\(\)\.toISOString\(\)/.test(src),
+    ],
+    [
+        'payload spreads context at top-level',
+        /\.\.\.\s*\(\s*context\s*\?\?\s*\{\s*\}\s*\)/.test(src),
+    ],
+    [
+        'payload does not nest context object',
+        !/\bcontext\s*,/.test(src),
+    ],
+    [
+        'batch resolves Redis once',
+        /const\s+redis\s*=\s*await\s+getRedis\(\)/.test(batchSrc),
+    ],
+    [
+        'batch avoids per-item enqueueMetadataJob calls',
+        !/enqueueMetadataJob\s*\(/.test(batchSrc),
     ],
 ];
 
