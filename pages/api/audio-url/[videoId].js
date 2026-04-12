@@ -165,6 +165,8 @@
 
 import { Innertube, UniversalCache } from 'youtubei.js';
 import { getRedis } from '@/lib/redis';
+import { withRateLimit } from '@/lib/rateLimit';
+import { requireAuth } from '@/lib/requireAuth';
 
 // ─── Config ───────────────────────────────────────────────
 const CACHE_TTL_SECONDS = 2 * 60 * 60; // 2 hours
@@ -255,7 +257,7 @@ function log(msg) {
  * CRITICAL: YouTube URLs expire after ~6 hours. Mobile clients MUST check
  * expiresAt before playback and refetch if expired.
  */
-export default async function handler(req, res) {
+async function handler(req, res) {
     if (req.method !== 'GET') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
@@ -509,3 +511,5 @@ export default async function handler(req, res) {
         videoId,
     });
 }
+
+export default withRateLimit(requireAuth(handler), 120, 60000);
