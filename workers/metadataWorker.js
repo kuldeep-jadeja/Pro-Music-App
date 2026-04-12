@@ -234,16 +234,66 @@ function extractComputedMetadata(parsed) {
     };
 }
 
-function isMissingString(value) {
-    return typeof value !== 'string' || value.trim() === '' || value === 'Unknown Album';
+function buildMissingStringExpr(field) {
+    const fieldPath = `$${field}`;
+    return {
+        $let: {
+            vars: { fieldType: { $type: fieldPath } },
+            in: {
+                $cond: [
+                    { $eq: ['$$fieldType', 'string'] },
+                    {
+                        $or: [
+                            { $eq: [{ $trim: { input: fieldPath } }, ''] },
+                            { $eq: [fieldPath, 'Unknown Album'] },
+                        ],
+                    },
+                    true,
+                ],
+            },
+        },
+    };
 }
 
-function isMissingArray(value) {
-    return !Array.isArray(value) || value.length === 0;
+function buildMissingArrayExpr(field) {
+    const fieldPath = `$${field}`;
+    return {
+        $let: {
+            vars: { fieldType: { $type: fieldPath } },
+            in: {
+                $cond: [
+                    { $eq: ['$$fieldType', 'array'] },
+                    { $eq: [{ $size: fieldPath }, 0] },
+                    true,
+                ],
+            },
+        },
+    };
 }
 
-function isMissingObject(value) {
-    return !value || typeof value !== 'object' || Object.keys(value).length === 0;
+function buildMissingObjectExpr(field) {
+    const fieldPath = `$${field}`;
+    return {
+        $let: {
+            vars: { fieldType: { $type: fieldPath } },
+            in: {
+                $cond: [
+                    { $eq: ['$$fieldType', 'object'] },
+                    { $eq: [{ $size: { $objectToArray: fieldPath } }, 0] },
+                    true,
+                ],
+            },
+        },
+    };
+}
+
+function buildMissingGenreConfidenceExpr(field, nextConfidence) {
+    const fieldPath = `$${field}`;
+    const conditions = [{ $in: [{ $type: fieldPath }, ['missing', 'null']] }];
+    if (nextConfidence > 0) {
+        conditions.push({ $eq: [fieldPath, 0] });
+    }
+    return conditions.length === 1 ? conditions[0] : { $or: conditions };
 }
 
 function buildTrackQuery(job) {
@@ -282,11 +332,94 @@ async function applyMetadataUpdate(job) {
     }
 
     const computedMetadata = normalizeMetadataPayload(extractComputedMetadata(job.raw));
-    const track = await Track.findOne(query)
-        .select('album albumImage genres primaryGenre genreConfidence metadataFingerprint metadataSources')
-        .lean();
+    const setPatch = {
+        metadataUpdatedAt: new Date(),
+    };
+    const conditionalFields = [];
 
-    if (!track) {
+    if (computedMetadata.album) {
+        setPatch.album = {
+            $cond: [
+                buildMissingStringExpr('album'),
+                { $literal: computedMetadata.album },
+                '$album',
+            ],
+        };
+        conditionalFields.push('album');
+    }
+    if (computedMetadata.albumImage) {
+        setPatch.albumImage = {
+            $cond: [
+                buildMissingStringExpr('albumImage'),
+                { $literal: computedMetadata.albumImage },
+                '$albumImage',
+            ],
+        };
+        conditionalFields.push('albumImage');
+    }
+    if (computedMetadata.genres?.length) {
+        setPatch.genres = {
+            $cond: [
+                buildMissingArrayExpr('genres'),
+                { $literal: computedMetadata.genres },
+                '$genres',
+            ],
+        };
+        conditionalFields.push('genres');
+    }
+    if (computedMetadata.primaryGenre) {
+        setPatch.primaryGenre = {
+            $cond: [
+                buildMissingStringExpr('primaryGenre'),
+                { $literal: computedMetadata.primaryGenre },
+                '$primaryGenre',
+            ],
+        };
+        conditionalFields.push('primaryGenre');
+    }
+    if (typeof computedMetadata.genreConfidence === 'number') {
+        setPatch.genreConfidence = {
+            $cond: [
+                buildMissingGenreConfidenceExpr('genreConfidence', computedMetadata.genreConfidence),
+                { $literal: computedMetadata.genreConfidence },
+                '$genreConfidence',
+            ],
+        };
+        conditionalFields.push('genreConfidence');
+    }
+    if (computedMetadata.metadataFingerprint) {
+        setPatch.metadataFingerprint = {
+            $cond: [
+                buildMissingStringExpr('metadataFingerprint'),
+                { $literal: computedMetadata.metadataFingerprint },
+                '$metadataFingerprint',
+            ],
+        };
+        conditionalFields.push('metadataFingerprint');
+    }
+    if (computedMetadata.metadataSources) {
+        setPatch.metadataSources = {
+            $cond: [
+                buildMissingObjectExpr('metadataSources'),
+                { $literal: computedMetadata.metadataSources },
+                '$metadataSources',
+            ],
+        };
+        conditionalFields.push('metadataSources');
+    }
+
+    const result = await Track.updateOne(query, [
+        { $set: setPatch },
+        {
+            $set: {
+                metadataAttempts: {
+                    $add: [{ $ifNull: ['$metadataAttempts', 0] }, 1],
+                },
+            },
+        },
+    ]);
+
+    if (result.matchedCount === 0) {
         logWarn(
             `Skipping metadata write: track not found (` +
             `trackId=${job.trackId || 'n/a'}, spotifyId=${job.spotifyId || 'n/a'})`
@@ -294,55 +427,13 @@ async function applyMetadataUpdate(job) {
         return;
     }
 
-    const setPatch = {
-        metadataUpdatedAt: new Date(),
-    };
-    const patchedFields = [];
-
-    if (computedMetadata.album && isMissingString(track.album)) {
-        setPatch.album = computedMetadata.album;
-        patchedFields.push('album');
-    }
-    if (computedMetadata.albumImage && isMissingString(track.albumImage)) {
-        setPatch.albumImage = computedMetadata.albumImage;
-        patchedFields.push('albumImage');
-    }
-    if (computedMetadata.genres?.length && isMissingArray(track.genres)) {
-        setPatch.genres = computedMetadata.genres;
-        patchedFields.push('genres');
-    }
-    if (computedMetadata.primaryGenre && isMissingString(track.primaryGenre)) {
-        setPatch.primaryGenre = computedMetadata.primaryGenre;
-        patchedFields.push('primaryGenre');
-    }
-    if (
-        typeof computedMetadata.genreConfidence === 'number' &&
-        (track.genreConfidence === null || track.genreConfidence === undefined)
-    ) {
-        setPatch.genreConfidence = computedMetadata.genreConfidence;
-        patchedFields.push('genreConfidence');
-    }
-    if (computedMetadata.metadataFingerprint && isMissingString(track.metadataFingerprint)) {
-        setPatch.metadataFingerprint = computedMetadata.metadataFingerprint;
-        patchedFields.push('metadataFingerprint');
-    }
-    if (computedMetadata.metadataSources && isMissingObject(track.metadataSources)) {
-        setPatch.metadataSources = computedMetadata.metadataSources;
-        patchedFields.push('metadataSources');
-    }
-
-    await Track.updateOne(
-        { _id: track._id },
-        {
-            $set: setPatch,
-            $inc: { metadataAttempts: 1 },
-        }
-    );
-
-    if (patchedFields.length) {
-        log(`Updated metadata fields (${patchedFields.join(', ')}) for ${job.trackId || job.spotifyId}`);
+    if (conditionalFields.length) {
+        log(
+            `Applied atomic metadata update (${conditionalFields.join(', ')}) for ` +
+            `${job.trackId || job.spotifyId}`
+        );
     } else {
-        log(`No missing metadata fields to patch for ${job.trackId || job.spotifyId}; attempts incremented`);
+        log(`No computed metadata fields to patch for ${job.trackId || job.spotifyId}; attempts incremented`);
     }
 }
 
