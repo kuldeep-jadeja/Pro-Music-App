@@ -112,6 +112,21 @@ The worker is a separate Node process that processes YouTube matching jobs from 
 npm run ytmatch:worker
 ```
 
+### 5. Metadata Worker (Phase 1 Shadow Mode)
+
+Run metadata enrichment worker and coverage reporting in shadow mode:
+
+```bash
+npm run metadata:worker
+npm run metadata:coverage
+```
+
+Environment flag for Phase 1:
+
+```env
+METADATA_WORKER_SHADOW_MODE=true
+```
+
 ---
 
 ## 🔄 How It Works — The Import Pipeline
