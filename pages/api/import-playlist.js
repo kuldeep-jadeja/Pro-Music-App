@@ -1,5 +1,5 @@
 import { connectDB } from '@/lib/mongodb';
-import enqueueMetadataBatch from '@/lib/metadataQueue';
+import { enqueueMetadataBatch } from '@/lib/metadataQueue';
 import { withRateLimit } from '@/lib/rateLimit';
 import { requireAuth } from '@/lib/requireAuth';
 import {

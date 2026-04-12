@@ -12,7 +12,7 @@ const src = fs.readFileSync(importApiPath, 'utf8');
 const checks = [
     [
         'imports enqueueMetadataBatch',
-        /import\s+enqueueMetadataBatch\s+from\s+['"]@\/lib\/metadataQueue['"]/.test(src),
+        /import\s+\{\s*enqueueMetadataBatch\s*\}\s+from\s+['"]@\/lib\/metadataQueue['"]/.test(src),
     ],
     [
         'metadata enqueue call present',
