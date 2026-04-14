@@ -19,6 +19,7 @@ export default function AppLayout({ children }) {
         tracks,
         currentTrack,
         currentIndex,
+        handleTrackSelect,
         handleTrackChange,
         activeImport,
         dismissImport,
@@ -118,7 +119,7 @@ export default function AppLayout({ children }) {
                 playlist={tracks}
                 currentIndex={currentIndex}
                 activePlaylist={activePlaylist}
-                onTrackSelect={(track, idx) => handleTrackChange(track, idx)}
+                onTrackSelect={(track, idx) => handleTrackSelect(track, idx)}
                 isOpen={panelOpen}
                 onClose={() => setPanelOpen(false)}
             />
