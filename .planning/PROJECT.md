@@ -20,7 +20,7 @@ Turn Spotify playlist discovery into reliable, always-available playback with fa
 ### Active
 
 - [ ] Admin-only page shows all artist expansion jobs with filters (queued/running/done/failed)
-- [ ] Admin can multi-select artists and bulk queue expansion jobs
+- [ ] Admin can multi-select artists and bulk queue expansion jobs — queue APIs built in Phase 2 (enqueue-artists, retry-jobs, artistExpandWorker)
 - [x] Admin access is restricted to a single configured email — Validated in Phase 1: Admin Access Control
 
 ### Out of Scope
@@ -48,4 +48,4 @@ This is a brownfield Next.js Pages Router app with existing workers for YouTube 
 | Selection queues jobs only (no forced immediate run) | Keeps worker scheduling behavior consistent and predictable | — Pending |
 
 ---
-*Last updated: 2026-04-14 after Phase 1: Admin Access Control complete*
+*Last updated: 2026-04-14 after Phase 2: Queue-Safe Job Actions complete*
