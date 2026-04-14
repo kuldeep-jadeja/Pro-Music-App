@@ -19,6 +19,7 @@ export default function AdminDashboard({ adminEmail }) {
     const [query, setQuery] = useState('');
     const [debouncedQuery, setDebouncedQuery] = useState('');
     const [jobs, setJobs] = useState([]);
+    const [selected, setSelected] = useState({});
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
     const [retryFeedback, setRetryFeedback] = useState({});
@@ -56,7 +57,7 @@ export default function AdminDashboard({ adminEmail }) {
                 setIsLoading(false);
             }
         }
-    }, [jobs]);
+    }, [status, debouncedQuery]);
 
     useEffect(() => {
         fetchJobs();
@@ -102,19 +103,80 @@ export default function AdminDashboard({ adminEmail }) {
     }, [fetchJobs]);
 
     useEffect(() => {
+        const visibleJobIds = new Set(jobs.map((job) => String(job._id)));
+
+        setSelected((prev) => {
+            const next = {};
+            for (const [jobId, artist] of Object.entries(prev)) {
+                if (visibleJobIds.has(jobId)) {
+                    next[jobId] = artist;
+                }
+            }
+            return next;
+        });
+
         setRetryFeedback((prev) => {
-            const activeJobIds = new Set(jobs.map((job) => String(job._id)));
             const next = {};
             for (const [jobId, message] of Object.entries(prev)) {
-                if (activeJobIds.has(jobId)) {
+                if (visibleJobIds.has(jobId)) {
                     next[jobId] = message;
                 }
             }
             return next;
         });
-    }, [status, debouncedQuery]);
+    }, [jobs]);
 
     const hasActiveFilters = useMemo(() => status !== 'all' || debouncedQuery.length > 0, [status, debouncedQuery]);
+    const visibleRows = useMemo(() => jobs.map((job) => ({
+        jobId: String(job._id),
+        artistSpotifyId: job.artistSpotifyId || null,
+        artistName: job.artistName || null,
+    })), [jobs]);
+    const allVisibleSelected = useMemo(() => (
+        visibleRows.length > 0 && visibleRows.every((row) => Boolean(selected[row.jobId]))
+    ), [visibleRows, selected]);
+    const someVisibleSelected = useMemo(() => (
+        visibleRows.some((row) => Boolean(selected[row.jobId]))
+    ), [visibleRows, selected]);
+
+    const toggleRowSelection = useCallback((job) => {
+        const jobId = String(job._id);
+        setSelected((prev) => {
+            if (prev[jobId]) {
+                const next = { ...prev };
+                delete next[jobId];
+                return next;
+            }
+            return {
+                ...prev,
+                [jobId]: {
+                    artistSpotifyId: job.artistSpotifyId || null,
+                    artistName: job.artistName || null,
+                },
+            };
+        });
+    }, []);
+
+    const toggleSelectAllVisible = useCallback(() => {
+        setSelected((prev) => {
+            if (allVisibleSelected) {
+                const next = { ...prev };
+                for (const row of visibleRows) {
+                    delete next[row.jobId];
+                }
+                return next;
+            }
+
+            const next = { ...prev };
+            for (const row of visibleRows) {
+                next[row.jobId] = {
+                    artistSpotifyId: row.artistSpotifyId,
+                    artistName: row.artistName,
+                };
+            }
+            return next;
+        });
+    }, [allVisibleSelected, visibleRows]);
 
     return (
         <>
@@ -186,6 +248,19 @@ export default function AdminDashboard({ adminEmail }) {
                                 <table className={styles.table}>
                                     <thead>
                                         <tr>
+                                            <th>
+                                                <label className={styles.checkboxCell} aria-label="select all visible">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={allVisibleSelected}
+                                                        ref={(node) => {
+                                                            if (node) node.indeterminate = !allVisibleSelected && someVisibleSelected;
+                                                        }}
+                                                        onChange={toggleSelectAllVisible}
+                                                    />
+                                                    <span>select all visible</span>
+                                                </label>
+                                            </th>
                                             <th>Status</th>
                                             <th>Artist</th>
                                             <th>Artist Spotify ID</th>
@@ -197,6 +272,16 @@ export default function AdminDashboard({ adminEmail }) {
                                     <tbody>
                                         {jobs.map((job) => (
                                             <tr key={job._id}>
+                                                <td>
+                                                    <label className={styles.checkboxCell}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={Boolean(selected[String(job._id)])}
+                                                            onChange={() => toggleRowSelection(job)}
+                                                        />
+                                                        <span className={styles.checkboxLabel}>checkbox</span>
+                                                    </label>
+                                                </td>
                                                 <td>{job.status || '—'}</td>
                                                 <td>{job.artistName || '—'}</td>
                                                 <td>{job.artistSpotifyId || '—'}</td>

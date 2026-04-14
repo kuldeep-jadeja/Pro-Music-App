@@ -122,6 +122,27 @@
     vertical-align: top;
 }
 
+.checkboxCell {
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: $text-secondary;
+    font-size: 0.75rem;
+}
+
+.checkboxCell input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: $accent;
+}
+
+.checkboxLabel {
+    color: $text-muted;
+    font-size: 0.75rem;
+}
+
 .table tbody tr:hover {
     background: rgba($bg-surface-2, 0.35);
 }
