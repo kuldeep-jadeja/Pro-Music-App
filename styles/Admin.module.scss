@@ -48,13 +48,124 @@
 .adminBody {
     @include glass;
     border-radius: $radius-xl;
-    padding: 40px 32px;
+    padding: 32px 24px;
 }
 
-.adminPlaceholder {
+.jobsSection {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.filterBar {
+    display: grid;
+    grid-template-columns: 160px minmax(0, 1fr);
+    gap: 16px;
+}
+
+.filterLabel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: $text-secondary;
+}
+
+.filterSelect,
+.filterInput {
+    min-height: 40px;
+    border-radius: $radius-md;
+    border: 1px solid rgba($border, 0.8);
+    background: rgba($bg-surface, 0.95);
+    color: $text-primary;
+    padding: 8px 12px;
+    font-size: 0.9375rem;
+
+    &:focus-visible {
+        outline: 2px solid rgba($accent, 0.45);
+        outline-offset: 1px;
+    }
+}
+
+.tableWrap {
+    overflow-x: auto;
+    border: 1px solid rgba($border, 0.8);
+    border-radius: $radius-lg;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.table thead {
+    background: rgba($bg-surface-2, 0.9);
+}
+
+.table thead th {
+    text-align: left;
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: $text-muted;
+    padding: 12px 8px;
+    border-bottom: 1px solid rgba($border, 0.75);
+}
+
+.table tbody td {
+    color: $text-secondary;
+    padding: 8px;
+    border-bottom: 1px solid rgba($border, 0.45);
+    vertical-align: top;
+}
+
+.table tbody tr:hover {
+    background: rgba($bg-surface-2, 0.35);
+}
+
+.emptyState,
+.infoState,
+.errorState {
+    border: 1px solid rgba($border, 0.8);
+    border-radius: $radius-lg;
+    padding: 16px;
+}
+
+.emptyState h2 {
+    margin: 0 0 8px;
+    font-size: 1rem;
+    color: $text-primary;
+}
+
+.emptyState p {
+    margin: 0;
     color: $text-muted;
     font-size: 0.9375rem;
-    text-align: center;
-    margin: 0;
-    padding: 24px 0;
+}
+
+.infoState {
+    color: $text-secondary;
+}
+
+.errorState {
+    color: $danger;
+    border-color: rgba($danger, 0.45);
+}
+
+@media (max-width: 860px) {
+    .adminWrap {
+        padding: 32px 16px;
+    }
+
+    .adminBody {
+        padding: 24px 16px;
+    }
+
+    .filterBar {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
 }
