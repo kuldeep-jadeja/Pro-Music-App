@@ -17,7 +17,10 @@
   1. Signed-in user with the configured admin email can open the admin artist expansion page.
   2. Signed-in non-admin users cannot access admin artist-expansion APIs and receive a forbidden response.
   3. Admin-only behavior is consistently enforced for both page access and API usage.
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 01-01-PLAN.md — Build server-side admin authorization utilities and `/api/admin/*` guards
+- [ ] 01-02-PLAN.md — Implement protected `/admin` page UX, recheck loop, and admin-only navigation
 
 ### Phase 2: Queue-Safe Job Actions
 **Goal**: Admin-triggered expansion actions behave safely and predictably in the existing queue pipeline.
@@ -78,4 +81,6 @@
 | 2. Queue-Safe Job Actions | 0/3 | Not started | - |
 | 3. Admin Expansion Dashboard | 0/3 | Not started | - |
 | 4. Worker Coexistence Hardening | 0/2 | Not started | - |
+
+
 
