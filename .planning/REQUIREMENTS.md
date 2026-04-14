@@ -19,9 +19,9 @@
 
 ### Visibility
 
-- [ ] **VIS-01**: Admin can view artist expansion jobs by status (`queued`, `running`, `done`, `failed`)
-- [ ] **VIS-02**: Admin can filter jobs by status and artist identifier/name
-- [ ] **VIS-03**: Admin can see failure reason and last updated time for failed jobs
+- [x] **VIS-01**: Admin can view artist expansion jobs by status (`queued`, `running`, `done`, `failed`)
+- [x] **VIS-02**: Admin can filter jobs by status and artist identifier/name
+- [x] **VIS-03**: Admin can see failure reason and last updated time for failed jobs
 
 ### Worker Integration
 
@@ -55,9 +55,9 @@
 | QUEUE-02 | Phase 2 | Complete |
 | QUEUE-03 | Phase 2 | Complete |
 | QUEUE-04 | Phase 2 | Complete |
-| VIS-01 | Phase 3 | Pending |
-| VIS-02 | Phase 3 | Pending |
-| VIS-03 | Phase 3 | Pending |
+| VIS-01 | Phase 3 | Complete |
+| VIS-02 | Phase 3 | Complete |
+| VIS-03 | Phase 3 | Complete |
 | SYNC-01 | Phase 2 | Complete |
 | SYNC-02 | Phase 4 | Pending |
 | SYNC-03 | Phase 3 | Pending |

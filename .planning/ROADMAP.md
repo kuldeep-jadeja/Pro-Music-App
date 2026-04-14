@@ -48,7 +48,11 @@ Plans:
   3. Admin can select multiple artists and bulk queue expansion jobs from the dashboard.
   4. Failed jobs show failure reason and last updated time.
   5. Job status shown in the dashboard tracks real downstream worker outcomes, including retry transitions.
-**Plans**: TBD
+**Plans:** 1/3 plans complete
+Plans:
+- [x] 03-01-PLAN.md — Create shared dashboard contract constants and admin read API for artist jobs
+- [ ] 03-02-PLAN.md — Implement `/admin` dashboard filters/table with server-truth job rendering
+- [ ] 03-03-PLAN.md — Add bulk queue + retry UX with polling synchronization
 
 ### Phase 4: Worker Coexistence Hardening
 **Goal**: Expansion control operations coexist with current background worker behavior without regressions.
@@ -84,7 +88,6 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Admin Access Control | 2/2 | Complete   | 2026-04-14 |
 | 2. Queue-Safe Job Actions | 4/4 | Complete   | 2026-04-14 |
-| 3. Admin Expansion Dashboard | 0/3 | Not started | - |
+| 3. Admin Expansion Dashboard | 1/3 | In Progress | - |
 | 4. Worker Coexistence Hardening | 0/2 | Not started | - |
-
 
