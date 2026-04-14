@@ -3,12 +3,12 @@
 // ── Sidebar shell ─────────────────────────────────────────────
 .sidebar {
     position: fixed;
-    left: 0;
-    top: 0;
-    bottom: 0;
+    left: 8px;
+    top: 8px;
+    bottom: 8px;
     width: $sidebar-width;
-    background: $bg-secondary;
-    border-right: 1px solid $bg-elevated;
+    @include glass-heavy;
+    border-radius: $radius-2xl;
     display: flex;
     flex-direction: column;
     padding: 20px 12px 16px;
@@ -17,17 +17,32 @@
     overflow-x: hidden;
     transition: transform $transition-normal;
 
-    scrollbar-width: none;
-    &::-webkit-scrollbar {
-        display: none;
+    // Subtle gradient overlay
+    &::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: $radius-2xl;
+        background: linear-gradient(to bottom, rgba($accent, 0.03), transparent);
+        pointer-events: none;
     }
 
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
+
     @media (max-width: $breakpoint-mobile) {
-        transform: translateX(-100%);
+        transform: translateX(-110%);
+        left: 0;
+        top: 0;
+        bottom: 0;
+        border-radius: 0;
+        border-right: 1px solid rgba(white, 0.06);
+        border-left: none;
+        border-top: none;
+        border-bottom: none;
     }
 }
 
-// ── Sidebar open state (mobile) ───────────────────────────────
 .open {
     transform: translateX(0) !important;
 }
@@ -38,36 +53,45 @@
     align-items: center;
     gap: 10px;
     padding: 0 8px;
-    margin-bottom: 32px;
+    margin-bottom: 28px;
     flex-shrink: 0;
 }
 
 .logoIcon {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: $radius-lg;
+    background: rgba($accent, 0.15);
     color: $accent;
     flex-shrink: 0;
 }
 
 .logoText {
+    font-family: $font-display;
     font-size: 1.25rem;
     font-weight: 800;
     letter-spacing: -0.03em;
     color: $text-primary;
 }
 
-// ── Nav section ───────────────────────────────────────────────
+// ── Nav ───────────────────────────────────────────────────────
 .nav {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    margin-bottom: 32px;
+    margin-bottom: 28px;
 }
 
 .navLabel {
-    font-size: 0.6875rem;
+    font-size: 0.625rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: $text-muted;
+    letter-spacing: 0.15em;
+    color: rgba($text-muted, 0.6);
     padding: 0 12px;
     margin-bottom: 6px;
     margin-top: 2px;
@@ -78,41 +102,38 @@
     align-items: center;
     gap: 12px;
     padding: 10px 12px;
-    border-radius: $radius-lg;
+    border-radius: $radius-xl;
     font-size: 0.9375rem;
     font-weight: 500;
     color: $text-secondary;
-    transition:
-        background $transition-fast,
-        color $transition-fast;
+    transition: background $transition-fast, color $transition-fast, border-color $transition-fast;
     position: relative;
+    border: 1px solid transparent;
 
     &:hover {
-        background: rgba($accent, 0.08);
+        background: rgba($accent, 0.06);
         color: $text-primary;
     }
 
     &.active {
-        background: rgba($accent, 0.12);
-        color: $text-primary;
+        background: rgba($accent, 0.1);
+        border-color: rgba($accent, 0.15);
+        color: $accent;
 
-        // Left accent bar
-        &::before {
-            content: "";
-            position: absolute;
-            left: 0;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 3px;
-            height: 20px;
-            background: $accent;
-            border-radius: 0 $radius-full $radius-full 0;
-        }
-
-        svg {
-            color: $accent;
-        }
+        svg { color: $accent; }
     }
+}
+
+.navItemGuest {
+    opacity: 0.5;
+    cursor: default;
+    pointer-events: auto;
+}
+
+.lockHint {
+    margin-left: auto;
+    font-size: 0.65rem;
+    opacity: 0.7;
 }
 
 // ── Library (playlist list) ───────────────────────────────────
@@ -133,16 +154,12 @@
     min-height: 0;
 
     scrollbar-width: thin;
-    scrollbar-color: $bg-elevated transparent;
+    scrollbar-color: rgba(white, 0.06) transparent;
 
-    &::-webkit-scrollbar {
-        width: 4px;
-    }
-    &::-webkit-scrollbar-track {
-        background: transparent;
-    }
+    &::-webkit-scrollbar { width: 4px; }
+    &::-webkit-scrollbar-track { background: transparent; }
     &::-webkit-scrollbar-thumb {
-        background: $bg-elevated;
+        background: rgba(white, 0.06);
         border-radius: $radius-full;
     }
 }
@@ -152,24 +169,22 @@
     align-items: center;
     gap: 10px;
     padding: 7px 10px;
-    border-radius: $radius-md;
+    border-radius: $radius-lg;
     width: 100%;
     text-align: left;
     color: $text-secondary;
     font-size: 0.875rem;
     font-weight: 500;
-    transition:
-        background $transition-fast,
-        color $transition-fast;
+    transition: background $transition-fast, color $transition-fast;
     flex-shrink: 0;
 
     &:hover {
-        background: rgba(255, 255, 255, 0.05);
+        background: rgba(white, 0.04);
         color: $text-primary;
     }
 
     &.playlistActive {
-        background: rgba($accent, 0.1);
+        background: rgba($accent, 0.08);
         color: $text-primary;
     }
 }
@@ -177,7 +192,7 @@
 .plCover {
     width: 36px;
     height: 36px;
-    border-radius: $radius-sm;
+    border-radius: $radius-md;
     object-fit: cover;
     flex-shrink: 0;
 }
@@ -185,16 +200,13 @@
 .plCoverPlaceholder {
     width: 36px;
     height: 36px;
-    border-radius: $radius-sm;
-    background: linear-gradient(135deg, $accent 0%, $accent-secondary 100%);
-    opacity: 0.4;
+    border-radius: $radius-md;
+    background: linear-gradient(135deg, rgba($accent, 0.4), rgba($accent-teal, 0.2));
     flex-shrink: 0;
 }
 
 .plName {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    @include truncate;
     flex: 1;
     min-width: 0;
 }
@@ -204,18 +216,17 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 10px 8px;
+    padding: 12px 8px 2px;
     margin-top: auto;
     flex-shrink: 0;
-    border-top: 1px solid $bg-elevated;
-    padding-top: 14px;
+    border-top: 1px solid rgba(white, 0.05);
 }
 
 .avatar {
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
     border-radius: $radius-full;
-    background: linear-gradient(135deg, $accent 0%, $accent-secondary 100%);
+    background: linear-gradient(135deg, rgba($accent, 0.3), rgba($accent-teal, 0.2));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -225,25 +236,22 @@
     flex-shrink: 0;
 }
 
+.userMeta {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    flex: 1;
+}
+
 .userEmail {
     font-size: 0.8125rem;
+    color: $text-secondary;
+    @include truncate;
+}
+
+.userPlan {
+    font-size: 0.6875rem;
     color: $text-muted;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    flex: 1;
-    min-width: 0;
-}
-
-// ── Guest nav item hint ───────────────────────────────────────
-.navItemGuest {
-    opacity: 0.5;
-    cursor: default;
-    pointer-events: auto; // allow click to redirect to login
-}
-
-.lockHint {
-    margin-left: auto;
-    font-size: 0.65rem;
-    opacity: 0.7;
+    letter-spacing: 0.03em;
 }

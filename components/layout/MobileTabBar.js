@@ -34,7 +34,7 @@ function MusicNoteIcon() {
     );
 }
 
-export default function MobileTabBar({ user, currentTrack, activePlaylistId }) {
+export default function MobileTabBar({ user, currentTrack, activePlaylistId, onNowPlayingOpen }) {
     const router = useRouter();
     const isHome = router.pathname === '/';
     const isPlaylistPage = router.pathname.startsWith('/playlist');
@@ -91,7 +91,11 @@ export default function MobileTabBar({ user, currentTrack, activePlaylistId }) {
             active: !!currentTrack,
             disabled: !currentTrack && !activePlaylistId,
             onClick: () => {
-                if (activePlaylistId) router.push(`/playlist/${activePlaylistId}`);
+                if (currentTrack) {
+                    onNowPlayingOpen?.();
+                } else if (activePlaylistId) {
+                    router.push(`/playlist/${activePlaylistId}`);
+                }
             },
         },
     ];

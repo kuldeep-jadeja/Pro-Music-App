@@ -10,21 +10,19 @@
         bottom: 0;
         left: 0;
         right: 0;
-        // Extend height to absorb safe area so tab items stay in the
-        // visual 56px zone and never get squeezed into a smaller area.
-        height: calc(#{$tab-bar-height} + env(safe-area-inset-bottom));
+        height: calc(#{$tab-bar-height} + env(safe-area-inset-bottom, 0px));
         z-index: 115;
-        background: rgba(10, 10, 18, 0.94);
-        backdrop-filter: blur(20px) saturate(180%);
-        -webkit-backdrop-filter: blur(20px) saturate(180%);
-        border-top: 1px solid rgba(255, 255, 255, 0.06);
-        align-items: flex-start; // items sit at top of bar; safe area lives below
+        @include glass-heavy;
+        border-top: 1px solid rgba(white, 0.04);
+        border-radius: 0;
+        align-items: flex-start;
+        padding-bottom: env(safe-area-inset-bottom, 0px);
     }
 }
 
 .tab {
     flex: 1;
-    height: $tab-bar-height; // fixed visual height — safe area lives below
+    height: $tab-bar-height;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -35,9 +33,24 @@
     color: $text-muted;
     cursor: pointer;
     padding: 6px 4px;
-    transition: color 0.15s ease;
+    transition: color $transition-fast;
     -webkit-tap-highlight-color: transparent;
     min-width: 0;
+    position: relative;
+
+    // Active indicator bar at top
+    &::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%) scaleX(0);
+        width: 24px;
+        height: 2px;
+        border-radius: 0 0 $radius-full $radius-full;
+        background: $accent;
+        transition: transform $transition-fast;
+    }
 
     &:focus-visible {
         outline: 2px solid $accent;
@@ -47,6 +60,10 @@
 
 .tabActive {
     color: $accent;
+
+    &::before {
+        transform: translateX(-50%) scaleX(1);
+    }
 }
 
 .tabDisabled {
@@ -65,8 +82,8 @@
 }
 
 .tabLabel {
-    font-size: 0.575rem;
-    font-weight: 500;
+    font-size: 0.6875rem;
+    font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     line-height: 1;
@@ -77,15 +94,30 @@
 }
 
 .nowPlayingArt {
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    border-radius: $radius-sm;
     object-fit: cover;
-    border: 1.5px solid rgba(255, 255, 255, 0.15);
-    display: block;
 }
 
 .nowPlayingArtActive {
-    border-color: $accent;
-    box-shadow: 0 0 0 2px rgba($accent, 0.3);
+    border: 1px solid rgba($accent, 0.5);
+}
+
+// ── Landscape: compact tab bar ─────────────────────────────
+@media (max-width: $breakpoint-mobile) and (max-height: 500px) and (orientation: landscape) {
+    .tabBar {
+        height: 48px;
+        padding-bottom: 0;
+    }
+
+    .tab {
+        height: 48px;
+        gap: 0;
+        padding: 0 4px;
+    }
+
+    .tabLabel {
+        display: none;
+    }
 }

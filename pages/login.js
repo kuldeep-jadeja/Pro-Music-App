@@ -164,9 +164,8 @@ export default function Login() {
                 setError(data.error || 'Login failed.');
                 return;
             }
-
-            setUser(data.user);
             router.push('/');
+            setUser(data.user);
         } catch {
             setError('Network error. Please try again.');
         } finally {

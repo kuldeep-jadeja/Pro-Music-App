@@ -1,48 +1,69 @@
 @use "variables" as *;
 
-// ── Floating Glass Player ─────────────────────────────────────
+// ── Floating Glass Pill Player ────────────────────────────────
 .player {
     position: relative;
     width: 100%;
-    height: $player-height;
-    background: rgba(10, 10, 18, 0.88);
-    backdrop-filter: blur(40px) saturate(1.6);
-    -webkit-backdrop-filter: blur(40px) saturate(1.6);
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba($bg-elevated, 0.75);
+    backdrop-filter: blur(60px) saturate(1.8);
+    -webkit-backdrop-filter: blur(60px) saturate(1.8);
+    border: 1px solid rgba(white, 0.1);
+    border-radius: $radius-2xl;
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.05),
-        0 -20px 60px rgba(0, 0, 0, 0.5);
-    // 3-column × 2-row grid:
-    //   col 1 = track info (spans both rows)
-    //   col 2 row 1 = playback buttons, col 2 row 2 = progress bar
-    //   col 3 = volume (spans both rows)
+        0 8px 40px rgba(0, 0, 0, 0.6),
+        0 2px 4px rgba(0, 0, 0, 0.3);
     display: grid;
-    grid-template-columns: minmax(180px, 260px) 1fr minmax(130px, auto);
+    grid-template-columns: minmax(140px, 220px) 1fr minmax(100px, auto);
     grid-template-rows: auto auto;
     align-content: center;
-    column-gap: 20px;
+    column-gap: 16px;
     row-gap: 4px;
-    padding: 0 28px;
-    padding-bottom: env(safe-area-inset-bottom);
-    // overflow:visible keeps the mobile volume overlay (position:fixed) unclipped
+    padding: 0 20px;
+    height: $player-height;
     overflow: visible;
 
-    // Subtle accent glow seam at bottom centre
-    &::after {
+    // Top accent line
+    &::before {
         content: "";
         position: absolute;
-        bottom: 0;
+        top: -1px;
         left: 50%;
         transform: translateX(-50%);
-        width: min(320px, 90%);
+        width: 200px;
         height: 1px;
         background: linear-gradient(
-            90deg,
+            to right,
             transparent,
-            rgba(124, 92, 255, 0.35),
+            rgba($accent, 0.4),
             transparent
         );
         pointer-events: none;
+        border-radius: $radius-full;
+    }
+
+    @media (max-width: $breakpoint-mobile) {
+        grid-template-columns: auto 1fr auto;
+        height: 80px;
+        padding: 0 10px;
+        border-radius: $radius-xl;
+        column-gap: 8px;
+    }
+}
+
+// ── Empty state ───────────────────────────────────────────────
+.playerEmpty {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    height: 52px;
+    background: rgba($bg-elevated, 0.5);
+    backdrop-filter: blur(24px);
+    border: 1px solid rgba(white, 0.05);
+    border-radius: $radius-2xl;
+
+    &::before {
+        display: none;
     }
 }
 
@@ -50,23 +71,6 @@
     color: $text-muted;
     font-size: 0.875rem;
     letter-spacing: 0.04em;
-}
-
-// ── Compact empty state ───────────────────────────────────────
-.playerEmpty {
-    // Override grid with a simple centred flex for the empty state
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 10px;
-    height: 44px;
-    background: rgba(10, 10, 18, 0.6);
-    box-shadow: none;
-    border-top-color: transparent;
-
-    &::after {
-        display: none;
-    }
 }
 
 .emptyIcon {
@@ -78,39 +82,70 @@
 // ── Track Info ────────────────────────────────────────────────
 .trackInfo {
     grid-column: 1;
-    grid-row: 1 / 3; // span both rows so art+name stay vertically centred
+    grid-row: 1 / 3;
     align-self: center;
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 12px;
     min-width: 0;
-    max-width: 260px;
+
+    @media (max-width: $breakpoint-mobile) {
+        grid-row: 1;
+        max-width: 130px;
+    }
+}
+
+// Mobile: tappable to open Now Playing sheet
+.trackInfoTap {
+    @media (max-width: $breakpoint-mobile) {
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+        border-radius: $radius-lg;
+        transition: background $transition-fast;
+
+        &:active {
+            background: rgba(white, 0.05);
+        }
+    }
+}
+
+// Expand chevron — only visible on mobile inside trackInfoTap
+.expandChevron {
+    display: none;
+    flex-shrink: 0;
+    color: $text-muted;
+
+    @media (max-width: $breakpoint-mobile) {
+        display: block;
+    }
 }
 
 .albumArt {
-    width: 52px;
-    height: 52px;
+    width: 44px;
+    height: 44px;
     flex-shrink: 0;
-    border-radius: $radius-md;
+    border-radius: $radius-xl;
     object-fit: cover;
-    box-shadow:
-        0 4px 20px rgba(0, 0, 0, 0.6),
-        0 0 0 1px rgba(255, 255, 255, 0.07);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+
+    @media (max-width: $breakpoint-mobile) {
+        width: 36px;
+        height: 36px;
+        border-radius: $radius-lg;
+    }
 }
 
 .albumArtLink {
     display: block;
     flex-shrink: 0;
-    border-radius: $radius-md;
+    border-radius: $radius-xl;
     transition:
         transform $transition-fast,
         filter $transition-fast;
 
-    &:hover .albumArt,
     &:hover img {
         filter: brightness(1.15);
     }
-
     &:hover {
         transform: scale(1.05);
     }
@@ -120,7 +155,7 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
-    gap: 3px;
+    gap: 2px;
 }
 
 .trackName {
@@ -137,37 +172,52 @@
     @include truncate;
 }
 
-// ── Controls (buttons only — progress row is a separate grid item) ───────────
+// ── Controls ──────────────────────────────────────────────────
 .controls {
     grid-column: 2;
     grid-row: 1;
     display: flex;
     justify-content: center;
     align-items: center;
+
+    @media (max-width: $breakpoint-mobile) {
+        grid-row: 1;
+    }
 }
 
 .buttons {
     display: flex;
     align-items: center;
     gap: 4px;
+
+    @media (max-width: $breakpoint-mobile) {
+        gap: 0;
+    }
 }
 
 .controlBtn {
+    position: relative;
     width: 36px;
     height: 36px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
+    border-radius: $radius-full;
     color: $text-secondary;
     transition:
         color $transition-fast,
         background $transition-fast,
         transform $transition-fast;
 
+    @media (max-width: $breakpoint-mobile) {
+        display: flex;
+        width: 24px;
+        height: 24px;
+    }
+
     &:hover:not(:disabled) {
         color: $text-primary;
-        background: rgba(255, 255, 255, 0.08);
+        background: rgba(white, 0.08);
         transform: scale(1.08);
     }
 
@@ -181,436 +231,256 @@
     }
 }
 
-.playBtn {
-    width: 44px;
-    height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: $accent;
-    color: #fff;
-    border-radius: 50%;
-    margin: 0 6px;
-    flex-shrink: 0;
-    position: relative;
-    box-shadow:
-        0 4px 18px rgba(124, 92, 255, 0.45),
-        0 1px 4px rgba(0, 0, 0, 0.4);
-    transition:
-        transform $transition-fast,
-        background $transition-fast,
-        box-shadow $transition-fast;
+// Prev/Next visible on mobile too
+.controlBtnMobile {
+    composes: controlBtn;
 
-    // Outer glow ring
-    &::before {
-        content: "";
-        position: absolute;
-        inset: -5px;
-        border-radius: 50%;
-        border: 1.5px solid rgba(124, 92, 255, 0.28);
-        opacity: 0;
-        transition: opacity $transition-fast;
-        pointer-events: none;
-    }
-
-    &:hover {
-        background: $accent-hover;
-        transform: scale(1.07);
-        box-shadow:
-            0 6px 28px rgba(124, 92, 255, 0.65),
-            0 1px 4px rgba(0, 0, 0, 0.4);
-
-        &::before {
-            opacity: 1;
-        }
-    }
-
-    &:active {
-        transform: scale(0.96);
+    @media (max-width: $breakpoint-mobile) {
+        display: flex;
     }
 }
 
-// ── Progress Bar ──────────────────────────────────────────────
-.progressRow {
-    grid-column: 2;
-    grid-row: 2;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-}
+// Active state for shuffle / repeat buttons
+.controlBtnActive {
+    color: $accent !important;
 
-.time {
-    font-size: 0.6875rem;
-    color: $text-muted;
-    min-width: 34px;
-    text-align: center;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.02em;
-}
-
-// Tall hit area — visual bar lives in ::before, fill is absolute
-.progressBar {
-    flex: 1;
-    height: 20px;
-    cursor: pointer;
-    position: relative;
-    display: flex;
-    align-items: center;
-    border-radius: $radius-full;
-
-    &::before {
-        content: "";
-        position: absolute;
-        left: 0;
-        right: 0;
-        height: 3px;
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: $radius-full;
-        pointer-events: none;
-        transition:
-            height $transition-fast,
-            background $transition-fast;
-    }
-
-    &:hover::before {
-        height: 5px;
-        background: rgba(255, 255, 255, 0.15);
-    }
-}
-
-.progressFill {
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    height: 3px;
-    // Purple → cyan gradient for depth
-    background: linear-gradient(90deg, $accent 0%, $accent-secondary 100%);
-    border-radius: $radius-full;
-    pointer-events: none;
-    max-width: 100%;
-    transition:
-        width 0.3s linear,
-        height $transition-fast;
-
-    .progressBar:hover & {
-        height: 5px;
-    }
-
-    // Scrubber thumb — glows on hover
     &::after {
         content: "";
         position: absolute;
-        right: -6px;
-        top: 50%;
-        transform: translateY(-50%);
-        width: 12px;
-        height: 12px;
-        background: #fff;
-        border-radius: 50%;
-        opacity: 0;
-        transition: opacity $transition-fast;
-        box-shadow:
-            0 0 0 2px rgba(124, 92, 255, 0.4),
-            0 0 12px rgba(124, 92, 255, 0.7),
-            0 2px 4px rgba(0, 0, 0, 0.5);
+        bottom: 4px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 4px;
+        height: 4px;
+        border-radius: $radius-full;
+        background: $accent;
+    }
+}
+
+.playBtn {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: $text-primary;
+    color: $bg-primary;
+    border-radius: $radius-full;
+    margin: 0 4px;
+    flex-shrink: 0;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+    transition:
+        transform $transition-fast,
+        box-shadow $transition-fast;
+
+    &:hover {
+        transform: scale(1.1);
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
     }
 
-    .progressBar:hover &::after {
-        opacity: 1;
+    &:active {
+        transform: scale(0.95);
     }
 }
 
 // ── Volume ────────────────────────────────────────────────────
 .volume {
     grid-column: 3;
-    grid-row: 1 / 3; // span both rows, align-self centres it
+    grid-row: 1 / 3;
     align-self: center;
-    justify-self: end;
     display: flex;
     align-items: center;
     gap: 8px;
-    min-width: 130px;
-    justify-content: flex-end;
-    color: $text-muted;
     position: relative;
-    transition: color $transition-fast;
+    color: $text-muted;
+    min-width: 0;
 
-    &:hover {
-        color: $text-secondary;
+    @media (max-width: $breakpoint-mobile) {
+        display: flex;
+        grid-row: 1;
+        gap: 0;
     }
-}
-
-// Desktop icon is part of the slider row — hidden on mobile
-.volume > svg {
-    flex-shrink: 0;
 }
 
 .volumeSlider {
-    width: 88px;
-    height: 4px;
-    -webkit-appearance: none;
-    appearance: none;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: $radius-full;
-    outline: none;
+    width: 80px;
+    height: 3px;
     cursor: pointer;
     accent-color: $accent;
-    transition: background $transition-fast;
-
-    &:hover {
-        background: rgba(255, 255, 255, 0.16);
-    }
+    appearance: none;
+    -webkit-appearance: none;
+    background: rgba(white, 0.12);
+    border-radius: $radius-full;
+    outline: none;
 
     &::-webkit-slider-thumb {
         -webkit-appearance: none;
         width: 12px;
         height: 12px;
-        background: $accent;
-        border-radius: 50%;
+        border-radius: $radius-full;
+        background: $text-primary;
         cursor: pointer;
-        box-shadow: 0 0 6px rgba(124, 92, 255, 0.55);
-        transition: transform $transition-fast;
-    }
-
-    &:hover::-webkit-slider-thumb {
-        transform: scale(1.2);
     }
 
     &::-moz-range-thumb {
         width: 12px;
         height: 12px;
-        background: $accent;
-        border-radius: 50%;
+        border-radius: $radius-full;
+        background: $text-primary;
         cursor: pointer;
         border: none;
-        box-shadow: 0 0 6px rgba(124, 92, 255, 0.55);
+    }
+
+    @media (max-width: 900px) {
+        display: none;
     }
 }
 
-// ── Mobile volume button (touch devices only) ────────────────
+// Desktop volume icon — hide on mobile (volumeBtn shows instead)
+.volumeIcon {
+    flex-shrink: 0;
+
+    @media (max-width: $breakpoint-mobile) {
+        display: none;
+    }
+}
+
 .volumeBtn {
     display: none;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    color: $text-secondary;
-    flex-shrink: 0;
-    transition:
-        color $transition-fast,
-        background $transition-fast;
 
-    &:hover {
-        color: $text-primary;
-        background: rgba(255, 255, 255, 0.08);
+    @media (max-width: $breakpoint-mobile) {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
+        border-radius: $radius-full;
+        color: $text-secondary;
+        transition: color $transition-fast;
+
+        &:hover {
+            color: $text-primary;
+        }
     }
 }
 
-// ── Mobile vertical volume overlay ───────────────────────────
-// On desktop: absolutely positioned above the volume button.
-// On mobile: fixed so it escapes the player's stacking context
-//   (backdrop-filter on .player would otherwise contain it).
 .volumeOverlay {
-    position: absolute;
-    bottom: calc(100% + 12px);
-    right: 0;
+    position: fixed;
+    bottom: calc(#{$player-height} + 8px);
+    right: 16px;
+    z-index: 200;
+    @include glass;
+    border-radius: $radius-lg;
+    padding: 16px 14px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
-    background: rgba(20, 20, 28, 0.96);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid $bg-elevated;
-    border-radius: $radius-lg;
-    padding: 14px 12px;
-    // Must sit above playerSlot (z-index 120) and tabBar (z-index 115)
-    z-index: 250;
-    box-shadow:
-        0 8px 32px rgba(0, 0, 0, 0.6),
-        0 0 0 1px rgba(124, 92, 255, 0.12);
+    gap: 10px;
+    width: 52px;
 }
 
 .volumeOverlaySlider {
     writing-mode: vertical-lr;
     direction: rtl;
-    -webkit-appearance: slider-vertical;
-    appearance: auto;
-    width: 4px;
-    height: 100px;
-    accent-color: $accent;
+    width: 3px;
+    height: 80px;
     cursor: pointer;
-    outline: none;
+    accent-color: $accent;
+    appearance: none;
+    -webkit-appearance: none;
+    background: rgba(white, 0.12);
 }
 
 .volumeOverlayLabel {
     font-size: 0.6875rem;
     color: $text-muted;
-    font-variant-numeric: tabular-nums;
 }
 
-// ── Responsive ────────────────────────────────────────────────
-@media (max-width: 900px) {
-    .player {
-        padding: 0 20px;
-        column-gap: 16px;
-    }
+// ── Progress row ──────────────────────────────────────────────
+.progressRow {
+    grid-column: 2;
+    grid-row: 2;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 
-    .trackInfo {
-        max-width: 220px;
-    }
-}
-
-// ── Mobile: 2-row layout matching the mini-player design ─────
-//
-//  Row 1:  [album + title/artist (flex)] [⏮ ⏸/▶ ⏭] [🔊]
-//  Row 2:  [1:22 ───── progress bar ─────── 2:04]  (full width)
-//
-@media (max-width: 768px) {
-    .player {
-        // Collapse to 3 auto columns: info grows, buttons+volume shrink-wrap
-        grid-template-columns: 1fr auto auto;
-        grid-template-rows: auto auto;
-        // Reset desktop align-content so rows pack tightly within padding
-        align-content: normal;
-        // Vertically center all items within their row cells
-        align-items: center;
-        column-gap: 10px;
-        row-gap: 6px;
-        // Taller than desktop to comfortably fit 2 rows
-        height: auto;
-        min-height: $player-height-mobile;
-        padding: 10px 14px;
-        padding-bottom: calc(10px + env(safe-area-inset-bottom));
-    }
-
-    // ── Row 1 ──
-    .trackInfo {
-        grid-column: 1;
-        grid-row: 1; // Single row — no longer spans
-        align-self: center;
-        min-width: 0;
-        max-width: none; // Fill all available space
-        gap: 10px;
-    }
-
-    .controls {
-        grid-column: 2;
-        grid-row: 1;
-        align-self: center;
-    }
-
-    .volume {
-        grid-column: 3;
-        grid-row: 1; // Single row on mobile
-        align-self: center;
-        min-width: auto;
-        justify-self: end;
-    }
-
-    // ── Row 2 — full-width progress ──
-    .progressRow {
-        grid-column: 1 / -1; // Span all 3 columns edge-to-edge
-        grid-row: 2;
+    @media (max-width: $breakpoint-mobile) {
+        display: flex;
+        grid-column: 1 / -1;
+        padding: 0 2px 4px;
         gap: 8px;
     }
+}
 
-    // ── Track art + text ──
-    .albumArt {
-        width: 42px;
-        height: 42px;
-        border-radius: $radius-sm;
-    }
+// ── Mobile progress strip ─────────────────────────────────────
+// Replaced by the real progress row on mobile; kept for any non-mobile use.
+.mobileProgress {
+    display: none;
+}
 
-    .trackName {
-        font-size: 0.8125rem;
-    }
-    .artistName {
-        font-size: 0.6875rem;
-    }
+.mobileProgressFill {
+    height: 100%;
+    background: $accent;
+    border-radius: $radius-full;
+    transition: width 500ms linear;
+}
 
-    // ── Control buttons ──
-    .buttons {
-        gap: 2px;
-    }
-    .controlBtn {
-        width: 38px;
-        height: 38px;
-    }
-    .playBtn {
-        width: 44px;
-        height: 44px;
-        margin: 0 2px;
-    }
-
-    // ── Timestamps ──
-    .time {
-        font-size: 0.625rem;
-        min-width: 28px;
-    }
-
-    // ── Volume ──
-    // Hide desktop slider + icon; show the icon-button toggle
-    .volume > svg,
-    .volumeSlider {
-        display: none;
-    }
-
-    .volumeBtn {
-        display: flex;
-        width: 44px; // 44×44 WCAG minimum touch target
-        height: 44px;
-    }
-
-    // Volume overlay: fixed so it escapes the backdrop-filter stacking context
-    .volumeOverlay {
-        position: fixed;
-        bottom: calc(
-            #{$player-height-mobile} + #{$tab-bar-height} +
-                env(safe-area-inset-bottom) + 10px
-        );
-        right: 12px;
-        z-index: 250;
+.time {
+    font-size: 0.6875rem;
+    color: $text-muted;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+    width: 32px;
+    &:last-child {
+        text-align: right;
     }
 }
 
-// ── Ensure scrubber thumb is always visible on touch devices ──
-@media (pointer: coarse) {
-    .progressFill::after {
+.progressBar {
+    flex: 1;
+    height: 3px;
+    border-radius: $radius-full;
+    background: rgba(white, 0.08);
+    cursor: pointer;
+    position: relative;
+    transition: height $transition-fast;
+
+    // Extend clickable / tap target to 44px without affecting layout
+    &::before {
+        content: "";
+        position: absolute;
+        inset: -20px 0;
+    }
+
+    &:hover {
+        height: 5px;
+    }
+    &:hover .progressFill {
+        background: $accent;
+    }
+    &:hover .progressFill::after {
         opacity: 1;
-        width: 16px;
-        height: 16px;
-        right: -8px;
-    }
-
-    .progressBar {
-        // Taller hit area for fat fingers
-        height: 28px;
-
-        &::before {
-            height: 4px;
-        }
-    }
-
-    .progressFill {
-        height: 4px;
     }
 }
 
-// ── Very small phones (< 380px) — hide timestamps to reclaim space ──
-@media (max-width: 380px) {
-    .time {
-        display: none;
-    }
+.progressFill {
+    height: 100%;
+    border-radius: $radius-full;
+    background: rgba(white, 0.8);
+    position: relative;
+    transition: background $transition-fast;
 
-    .trackInfo {
-        max-width: 110px;
-    }
-
-    .controls {
-        gap: 3px;
+    &::after {
+        content: "";
+        position: absolute;
+        right: -5px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 10px;
+        height: 10px;
+        border-radius: $radius-full;
+        background: $text-primary;
+        opacity: 0;
+        transition: opacity $transition-fast;
     }
 }

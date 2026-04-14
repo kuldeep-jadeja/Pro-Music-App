@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
 import Player from '@/components/Player';
 import MobileTabBar from './MobileTabBar';
 import NowPlayingPanel from './NowPlayingPanel';
+import MobileNowPlayingSheet from './MobileNowPlayingSheet';
 import { useAppContext } from '@/lib/AppContext';
+import { usePlayer } from '@/context/PlayerContext';
 import styles from '@/styles/AppLayout.module.scss';
 
 export default function AppLayout({ children }) {
@@ -24,7 +26,40 @@ export default function AppLayout({ children }) {
 
     const router = useRouter();
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const [panelOpen, setPanelOpen] = useState(false);
+    const [panelOpen, setPanelOpen] = useState(true);
+    const [sheetOpen, setSheetOpen] = useState(false);
+
+    const {
+        playTrack,
+        currentTrack: playerCtxTrack,
+        currentIndex: playerCtxIndex,
+    } = usePlayer();
+
+    const tracksRef = useRef(tracks);
+    useEffect(() => { tracksRef.current = tracks; }, [tracks]);
+    const lastAppTrackId = useRef(null);
+    const lastPlayerTrackId = useRef(null);
+
+    const appTrackId = (currentTrack?._id ?? currentTrack?.id)?.toString() ?? null;
+    const playerTrackId = (playerCtxTrack?._id ?? playerCtxTrack?.id)?.toString() ?? null;
+
+    // AppContext → PlayerContext: relay user track selection to the shared player
+    useEffect(() => {
+        if (!appTrackId || appTrackId === lastAppTrackId.current) return;
+        lastAppTrackId.current = appTrackId;
+        lastPlayerTrackId.current = appTrackId;
+        playTrack(currentTrack, currentIndex, tracksRef.current);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [appTrackId]);
+
+    // PlayerContext → AppContext: keep UI in sync when track auto-advances
+    useEffect(() => {
+        if (!playerTrackId || playerTrackId === lastPlayerTrackId.current) return;
+        lastPlayerTrackId.current = playerTrackId;
+        lastAppTrackId.current = playerTrackId;
+        handleTrackChange(playerCtxTrack, playerCtxIndex);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [playerTrackId]);
 
     // Show the floating import chip on every page except home (where ImportForm
     // already shows the matching card inline).
@@ -34,7 +69,7 @@ export default function AppLayout({ children }) {
         router.pathname !== '/';
 
     return (
-        <div className={styles.shell}>
+        <div className={`${styles.shell}${panelOpen ? ` ${styles.shellPanelOpen}` : ''}`}>
             <Sidebar
                 user={user}
                 playlists={playlists}
@@ -52,7 +87,7 @@ export default function AppLayout({ children }) {
                 />
             )}
 
-            <div className={`${styles.body} ${currentTrack ? styles.bodyWithPanel : ''}`}>
+            <div className={styles.body}>
                 <Navbar
                     user={user}
                     onLogout={handleLogout}
@@ -74,8 +109,8 @@ export default function AppLayout({ children }) {
                     track={currentTrack}
                     playlist={tracks}
                     currentIndex={currentIndex}
-                    onTrackChange={handleTrackChange}
                     playlistId={activePlaylist?.id}
+                    onOpenSheet={() => setSheetOpen(true)}
                 />
             </div>
 
@@ -83,6 +118,13 @@ export default function AppLayout({ children }) {
                 user={user}
                 currentTrack={currentTrack}
                 activePlaylistId={activePlaylist?.id}
+                onNowPlayingOpen={() => setSheetOpen(true)}
+            />
+
+            <MobileNowPlayingSheet
+                track={currentTrack}
+                isOpen={sheetOpen}
+                onClose={() => setSheetOpen(false)}
             />
 
             <NowPlayingPanel
@@ -126,9 +168,24 @@ export default function AppLayout({ children }) {
                     <button
                         className={styles.importChipClose}
                         onClick={dismissImport}
-                        aria-label="Dismiss import progress"
+                        aria-label={
+                            activeImport.phase === 'complete'
+                                ? 'Dismiss'
+                                : 'Hide — import continues in background'
+                        }
+                        title={
+                            activeImport.phase === 'complete'
+                                ? 'Dismiss'
+                                : 'Hide — import still running in background'
+                        }
                     >
-                        ×
+                        {activeImport.phase === 'complete' ? (
+                            '×'
+                        ) : (
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+                                <path d="M19 13H5v-2h14v2z" />
+                            </svg>
+                        )}
                     </button>
                 </div>
             )}

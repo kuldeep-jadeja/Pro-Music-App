@@ -17,6 +17,9 @@ export default function Document() {
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Demus" />
 
+        {/* Hint to iOS WebKit: allow inline/background media playback */}
+        <meta name="media-playback-allows-inline" content="" />
+
         {/* Touch icons — iOS ignores the manifest icons so we need these */}
         <link rel="apple-touch-icon" href="/icons/icon-180.png" />
         <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png" />
@@ -34,7 +37,7 @@ export default function Document() {
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" href="/icons/icon-192.png" type="image/png" />
 
-        <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet"></link>
+        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200..800&family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet" />
       </Head>
       <body>
         <Main />

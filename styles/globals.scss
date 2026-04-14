@@ -1,4 +1,5 @@
 @use "variables" as *;
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200..800&family=Space+Grotesk:wght@300..700&display=swap");
 
 *,
 *::before,
@@ -12,23 +13,28 @@ html {
     font-size: 16px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    // Use dvh for proper mobile viewport height (accounts for browser chrome)
     height: 100%;
 }
 
 body {
-    font-family: $font-sans;
+    font-family: $font-body;
     background: $bg-primary;
     color: $text-primary;
     min-height: 100vh;
     min-height: 100dvh;
     overflow-x: hidden;
-    // Prevent iOS from zooming on input focus
     -webkit-text-size-adjust: 100%;
-    // Remove tap highlight on mobile
     -webkit-tap-highlight-color: transparent;
-    // Improve text rendering on mobile
     text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: $font-display;
 }
 
 a {
@@ -59,12 +65,12 @@ input {
 }
 
 ::selection {
-    background: $accent;
+    background: rgba($accent, 0.3);
     color: $text-primary;
 }
 
 ::-webkit-scrollbar {
-    width: 8px;
+    width: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -72,7 +78,7 @@ input {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: $bg-elevated;
+    background: $bg-surface;
     border-radius: $radius-full;
     &:hover {
         background: $text-muted;

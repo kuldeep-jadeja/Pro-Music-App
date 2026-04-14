@@ -6,7 +6,7 @@ import {
     useCallback,
     useEffect,
 } from 'react';
-import { registerAudioUnlock } from '@/lib/unlockAudio';
+import { registerAudioUnlock, resumeSilentAudio } from '@/lib/unlockAudio';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PlayerContext — Global playback state & YouTube IFrame player management
@@ -26,7 +26,9 @@ import { registerAudioUnlock } from '@/lib/unlockAudio';
 //            duration, volume, isReady, isLoading
 //   Actions: play(videoId), playTrack(track, index, queue?), togglePlay(),
 //            seek(seconds), setVolume(val), playNext(), playPrevious(),
-//            setQueue(tracks), initPlayer(containerId)
+//            setQueue(tracks), initPlayer(containerId),
+//            toggleShuffle(), cycleRepeat()
+//   Modes:   isShuffleOn (bool), repeatMode ('off'|'all'|'one')
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PlayerContext = createContext(null);
@@ -45,6 +47,8 @@ export function PlayerProvider({ children }) {
     const [volume, setVolumeState] = useState(80);
     const [isReady, setIsReady] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [isShuffleOn, setIsShuffleOn] = useState(false);
+    const [repeatMode, setRepeatMode] = useState('off'); // 'off' | 'all' | 'one'
 
     // ── Refs for stale-closure prevention ─────────────────────────────────
     // The YT.Player callbacks (onStateChange, onError) are bound once at
@@ -53,11 +57,19 @@ export function PlayerProvider({ children }) {
     const queueRef = useRef(queue);
     const currentIndexRef = useRef(currentIndex);
     const volumeRef = useRef(volume);
+    const isShuffleOnRef = useRef(false);
+    const repeatModeRef = useRef('off');
+    const shuffledOrderRef = useRef([]); // array of queue indices in shuffled order
+    const shufflePositionRef = useRef(0); // current position in shuffledOrderRef
     const playNextRef = useRef(null); // populated after playNext is defined
+    const playPreviousRef = useRef(null); // populated after playPrevious is defined
+    const wasPlayingRef = useRef(false); // true if player was playing before page went hidden
 
     useEffect(() => { queueRef.current = queue; }, [queue]);
     useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
     useEffect(() => { volumeRef.current = volume; }, [volume]);
+    useEffect(() => { isShuffleOnRef.current = isShuffleOn; }, [isShuffleOn]);
+    useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
 
     // ── Time tracking ─────────────────────────────────────────────────────
     const stopTimeTracking = useCallback(() => {
@@ -71,9 +83,25 @@ export function PlayerProvider({ children }) {
         stopTimeTracking();
         intervalRef.current = setInterval(() => {
             if (playerRef.current?.getCurrentTime) {
-                setCurrentTime(playerRef.current.getCurrentTime());
+                const time = playerRef.current.getCurrentTime();
+                setCurrentTime(time);
+
+                // Keep lock-screen position state in sync while playing.
+                // This prevents iOS from dropping the media session.
+                if ('mediaSession' in navigator && navigator.mediaSession.metadata) {
+                    try {
+                        const dur = playerRef.current.getDuration?.() || 0;
+                        if (dur > 0) {
+                            navigator.mediaSession.setPositionState({
+                                duration: dur,
+                                playbackRate: 1,
+                                position: Math.min(time, dur),
+                            });
+                        }
+                    } catch { }
+                }
             }
-        }, 500);
+        }, 1000);
     }, [stopTimeTracking]);
 
     // Cleanup on unmount
@@ -107,17 +135,85 @@ export function PlayerProvider({ children }) {
                         // Register the iOS audio-unlock handler now that the
                         // player exists.  It fires on the first user gesture.
                         registerAudioUnlock(() => playerRef.current);
+
+                        // ── Media Session action handlers ──────────────────
+                        // Registered ONCE here so they are never duplicated.
+                        // Use refs to always call the latest playNext/playPrevious.
+                        if ('mediaSession' in navigator) {
+                            navigator.mediaSession.setActionHandler('play', () => {
+                                playerRef.current?.playVideo();
+                                resumeSilentAudio();
+                            });
+                            navigator.mediaSession.setActionHandler('pause', () => {
+                                playerRef.current?.pauseVideo();
+                            });
+                            navigator.mediaSession.setActionHandler('nexttrack', () => {
+                                playNextRef.current?.();
+                            });
+                            navigator.mediaSession.setActionHandler('previoustrack', () => {
+                                playPreviousRef.current?.();
+                            });
+                            // seekbackward/seekforward keep iOS scrubber functional
+                            navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+                                const offset = details?.seekOffset || 10;
+                                const time = playerRef.current?.getCurrentTime?.() || 0;
+                                playerRef.current?.seekTo(Math.max(time - offset, 0), true);
+                            });
+                            navigator.mediaSession.setActionHandler('seekforward', (details) => {
+                                const offset = details?.seekOffset || 10;
+                                const time = playerRef.current?.getCurrentTime?.() || 0;
+                                const dur = playerRef.current?.getDuration?.() || 0;
+                                playerRef.current?.seekTo(Math.min(time + offset, dur), true);
+                            });
+                            try {
+                                navigator.mediaSession.setActionHandler('seekto', (details) => {
+                                    if (details?.seekTime != null) {
+                                        playerRef.current?.seekTo(details.seekTime, true);
+                                    }
+                                });
+                            } catch { /* seekto not supported in all browsers */ }
+                        }
                     },
                     onStateChange: (event) => {
                         const state = event.data;
 
                         if (state === window.YT.PlayerState.PLAYING) {
                             setIsPlaying(true);
-                            setDuration(event.target.getDuration());
+                            wasPlayingRef.current = true;
+                            const dur = event.target.getDuration();
+                            setDuration(dur);
                             startTimeTracking();
+
+                            // Keep iOS audio session alive in background
+                            resumeSilentAudio();
+
+                            if ('mediaSession' in navigator) {
+                                navigator.mediaSession.playbackState = 'playing';
+                                // Position state keeps lock-screen scrubber in sync
+                                // and prevents iOS from assuming playback stopped.
+                                try {
+                                    navigator.mediaSession.setPositionState({
+                                        duration: dur || 0,
+                                        playbackRate: 1,
+                                        position: Math.min(
+                                            event.target.getCurrentTime?.() || 0,
+                                            dur || 0
+                                        ),
+                                    });
+                                } catch { }
+                            }
                         } else if (state === window.YT.PlayerState.PAUSED) {
                             setIsPlaying(false);
                             stopTimeTracking();
+                            // Only clear wasPlayingRef if the page is visible.
+                            // If hidden, the OS suspended playback — we want
+                            // to auto-resume when the page returns.
+                            if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+                                wasPlayingRef.current = false;
+                            }
+                            if ('mediaSession' in navigator) {
+                                navigator.mediaSession.playbackState = 'paused';
+                            }
                         } else if (
                             state === window.YT.PlayerState.ENDED &&
                             playerRef.current?.getCurrentTime() > 2
@@ -149,6 +245,38 @@ export function PlayerProvider({ children }) {
             }, 100);
         }
     }, [startTimeTracking, stopTimeTracking]);
+
+    // ── Shuffle helpers ────────────────────────────────────────────────────
+    const buildShuffledOrder = useCallback((q, startIdx) => {
+        const indices = q.map((_, i) => i).filter(i => i !== startIdx);
+        // Fisher-Yates shuffle
+        for (let i = indices.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [indices[i], indices[j]] = [indices[j], indices[i]];
+        }
+        return [startIdx, ...indices];
+    }, []);
+
+    const toggleShuffle = useCallback(() => {
+        setIsShuffleOn(prev => {
+            const next = !prev;
+            if (next) {
+                const order = buildShuffledOrder(queueRef.current, currentIndexRef.current);
+                shuffledOrderRef.current = order;
+                shufflePositionRef.current = 0;
+            }
+            return next;
+        });
+    }, [buildShuffledOrder]);
+
+    const cycleRepeat = useCallback(() => {
+        setRepeatMode(prev => {
+            const modes = ['off', 'all', 'one'];
+            const next = modes[(modes.indexOf(prev) + 1) % modes.length];
+            repeatModeRef.current = next;
+            return next;
+        });
+    }, []);
 
     // ── Match a single track via the API ──────────────────────────────────
     // Checks MongoDB cache first; scrapes YouTube only on a cache miss.
@@ -203,7 +331,32 @@ export function PlayerProvider({ children }) {
         setIsLoading(false);
 
         if (videoId) {
+            // ── Media Session metadata ────────────────────────────
+            // Set metadata BEFORE play() — iOS reads it at the moment
+            // the audio session activates.  Setting it after loadVideoById
+            // is too late on some iOS versions.
+            if ('mediaSession' in navigator) {
+                const artworkSrc = track.albumImage
+                    || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: track.name,
+                    artist: track.artists?.join(', ') || 'Unknown Artist',
+                    album: track.album || '',
+                    artwork: [
+                        { src: artworkSrc, sizes: '96x96', type: 'image/jpeg' },
+                        { src: artworkSrc, sizes: '128x128', type: 'image/jpeg' },
+                        { src: artworkSrc, sizes: '192x192', type: 'image/jpeg' },
+                        { src: artworkSrc, sizes: '256x256', type: 'image/jpeg' },
+                        { src: artworkSrc, sizes: '384x384', type: 'image/jpeg' },
+                        { src: artworkSrc, sizes: '512x512', type: 'image/jpeg' },
+                    ],
+                });
+            }
+
             play(videoId);
+
+            // Keep the silent audio helper running for iOS background
+            resumeSilentAudio();
 
             // ── Prefetch optimisation ─────────────────────────────
             // While the current track plays, silently resolve the next
@@ -212,8 +365,16 @@ export function PlayerProvider({ children }) {
             if (q[index + 1]) {
                 matchTrack(q[index + 1]).catch(() => { /* non-critical */ });
             }
+
+            // ── Rebuild shuffled order when a track is selected directly ──
+            // This ensures next/previous navigate from the newly chosen track.
+            if (isShuffleOnRef.current) {
+                const order = buildShuffledOrder(q, index);
+                shuffledOrderRef.current = order;
+                shufflePositionRef.current = 0;
+            }
         }
-    }, [matchTrack, play]);
+    }, [matchTrack, play, buildShuffledOrder]);
 
     // ── Toggle play / pause ───────────────────────────────────────────────
     const togglePlay = useCallback(() => {
@@ -251,13 +412,47 @@ export function PlayerProvider({ children }) {
     const playNext = useCallback(() => {
         const q = queueRef.current;
         const idx = currentIndexRef.current;
-        if (!q || idx >= q.length - 1) return;
+        const repeat = repeatModeRef.current;
+        const shuffle = isShuffleOnRef.current;
 
-        // Skip tracks that have no YouTube match — only play matched tracks.
+        // Repeat one: replay the current track from the start
+        if (repeat === 'one') {
+            if (q[idx]) playTrack(q[idx], idx);
+            return;
+        }
+
+        // Shuffle mode: advance through the shuffled order
+        if (shuffle) {
+            const order = shuffledOrderRef.current;
+            let nextPos = shufflePositionRef.current + 1;
+            if (nextPos >= order.length) {
+                if (repeat === 'all') {
+                    nextPos = 0;
+                } else {
+                    return;
+                }
+            }
+            shufflePositionRef.current = nextPos;
+            const nextIdx = order[nextPos];
+            playTrack(q[nextIdx], nextIdx);
+            return;
+        }
+
+        // Normal sequential playback
         for (let i = idx + 1; i < q.length; i++) {
             if (q[i].youtubeVideoId) {
                 playTrack(q[i], i);
                 return;
+            }
+        }
+
+        // Reached end — wrap around if repeat all
+        if (repeat === 'all') {
+            for (let i = 0; i < idx; i++) {
+                if (q[i].youtubeVideoId) {
+                    playTrack(q[i], i);
+                    return;
+                }
             }
         }
         // No playable track found ahead — stop playback silently.
@@ -266,6 +461,19 @@ export function PlayerProvider({ children }) {
     const playPrevious = useCallback(() => {
         const q = queueRef.current;
         const idx = currentIndexRef.current;
+        const shuffle = isShuffleOnRef.current;
+
+        // Shuffle mode: step back through the shuffled order
+        if (shuffle) {
+            const order = shuffledOrderRef.current;
+            let prevPos = shufflePositionRef.current - 1;
+            if (prevPos < 0) prevPos = order.length - 1;
+            shufflePositionRef.current = prevPos;
+            const prevIdx = order[prevPos];
+            playTrack(q[prevIdx], prevIdx);
+            return;
+        }
+
         if (!q || idx <= 0) return;
 
         // Skip tracks that have no YouTube match — only play matched tracks.
@@ -280,6 +488,7 @@ export function PlayerProvider({ children }) {
 
     // Keep ref in sync so the YT onStateChange closure can call the latest version
     useEffect(() => { playNextRef.current = playNext; }, [playNext]);
+    useEffect(() => { playPreviousRef.current = playPrevious; }, [playPrevious]);
 
     // ── Public queue setter ───────────────────────────────────────────────
     const setQueue = useCallback((tracks) => {
@@ -298,10 +507,13 @@ export function PlayerProvider({ children }) {
         volume,
         isReady,
         isLoading,
+        isShuffleOn,
+        repeatMode,
 
         // Initialisation (called by GlobalPlayer)
         initPlayer,
         playerRef,
+        wasPlayingRef,
 
         // Actions
         play,
@@ -312,6 +524,12 @@ export function PlayerProvider({ children }) {
         playNext,
         playPrevious,
         setQueue,
+        toggleShuffle,
+        cycleRepeat,
+
+        // Modes
+        isShuffleOn,
+        repeatMode,
     };
 
     return (

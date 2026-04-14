@@ -1,0 +1,244 @@
+@use "variables" as *;
+
+// ── Mobile Now Playing bottom sheet ──────────────────────────
+// Only rendered on mobile (≤768px); hidden via CSS at larger widths.
+
+.backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba($bg-primary, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 130;
+
+    @media (min-width: calc(#{$breakpoint-mobile} + 1px)) {
+        display: none;
+    }
+}
+
+.sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 135;
+    @include glass-heavy;
+    border-radius: $radius-2xl $radius-2xl 0 0;
+    padding: 0 24px calc(40px + env(safe-area-inset-bottom, 0px));
+    transform: translateY(100%);
+    transition: transform 320ms $ease-out;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+
+    &.open {
+        transform: translateY(0);
+    }
+
+    @media (min-width: calc(#{$breakpoint-mobile} + 1px)) {
+        display: none;
+    }
+}
+
+// Drag handle / close tap target
+.handle {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    padding: 12px 0 4px;
+    background: transparent;
+    flex-shrink: 0;
+    // Extend tap area
+    margin: 0 -24px;
+    padding-left: 24px;
+    padding-right: 24px;
+}
+
+.handleBar {
+    width: 36px;
+    height: 4px;
+    background: rgba(white, 0.2);
+    border-radius: $radius-full;
+    display: block;
+}
+
+// Album art
+.artWrap {
+    width: min(72vw, 280px);
+    aspect-ratio: 1 / 1;
+    flex-shrink: 0;
+}
+
+.art {
+    width: 100%;
+    height: 100%;
+    border-radius: $radius-xl;
+    object-fit: cover;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+.artPlaceholder {
+    width: 100%;
+    height: 100%;
+    border-radius: $radius-xl;
+    background: linear-gradient(
+        135deg,
+        rgba($accent, 0.4) 0%,
+        rgba($accent-teal, 0.2) 100%
+    );
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(white, 0.3);
+
+    svg {
+        width: 56px;
+        height: 56px;
+    }
+}
+
+// Track info
+.meta {
+    text-align: center;
+    width: 100%;
+}
+
+.name {
+    font-family: $font-display;
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: $text-primary;
+    margin: 0 0 4px;
+    @include truncate;
+}
+
+.artist {
+    font-size: 0.9375rem;
+    color: $text-secondary;
+    margin: 0;
+    @include truncate;
+}
+
+// Seek bar
+.seekWrap {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.seekBar {
+    position: relative;
+    width: 100%;
+    height: 4px;
+    background: rgba(white, 0.1);
+    border-radius: $radius-full;
+    cursor: pointer;
+
+    // Extend touch target to 44px without affecting layout
+    &::before {
+        content: "";
+        position: absolute;
+        inset: -20px 0;
+    }
+}
+
+.seekFill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background: $accent;
+    border-radius: $radius-full;
+    pointer-events: none;
+}
+
+.seekThumb {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 12px;
+    background: white;
+    border-radius: $radius-full;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+}
+
+.seekTimes {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: $text-muted;
+    font-variant-numeric: tabular-nums;
+}
+
+// Playback controls
+.controls {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding-bottom: 8px;
+}
+
+.ctrlBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    border-radius: $radius-full;
+    color: $text-secondary;
+    transition:
+        color $transition-fast,
+        background $transition-fast,
+        transform $transition-fast;
+
+    &:hover {
+        color: $text-primary;
+        background: rgba(white, 0.06);
+    }
+
+    &:active {
+        transform: scale(0.92);
+    }
+}
+
+.playPauseBtn {
+    width: 64px;
+    height: 64px;
+    background: $accent;
+    color: white;
+    box-shadow: 0 4px 24px rgba($accent, 0.35);
+
+    &:hover {
+        background: $accent-glow;
+        color: white;
+    }
+}
+
+// Smaller secondary control buttons (shuffle / repeat)
+.ctrlBtnSm {
+    width: 40px;
+    height: 40px;
+    color: $text-muted;
+}
+
+// Active state for shuffle / repeat
+.ctrlBtnActive {
+    color: $accent !important;
+    position: relative;
+
+    &::after {
+        content: "";
+        position: absolute;
+        bottom: 2px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: $accent;
+    }
+}
