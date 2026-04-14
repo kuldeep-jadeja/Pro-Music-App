@@ -4,6 +4,8 @@ import { requireAuth } from '@/lib/requireAuth';
 import Playlist from '@/models/Playlist';
 import Track from '@/models/Track';
 
+const LIKED_PLAYLIST_ID = 'DEMUS_LIKED_SONGS';
+
 /**
  * POST /api/favorites/like
  * Body: { track: { spotifyId, name, artists, albumImage, youtubeVideoId, duration, album } }
@@ -29,62 +31,37 @@ async function handler(req, res) {
     try {
         await connectDB();
 
-        // 1. Find or create the "Liked Songs" playlist
-        let likedPlaylist = await Playlist.findOne({
-            user: req.user._id,
-            spotifyPlaylistId: 'DEMUS_LIKED_SONGS',
-        });
+        // 1. Find or create the "Liked Songs" playlist atomically
+        const likedPlaylist = await getOrCreateLikedPlaylist(req.user._id);
 
-        if (!likedPlaylist) {
-            likedPlaylist = await Playlist.create({
-                user: req.user._id,
-                name: 'Liked Songs',
-                description: 'Your favorite tracks',
-                spotifyPlaylistId: 'DEMUS_LIKED_SONGS',
-                coverImage: '/liked-songs-icon.png',
-                status: 'ready',
-                trackCount: 0,
-                tracks: [],
-            });
+        // 2. Find or create the track atomically
+        const trackDoc = await getOrCreateTrack(track);
+
+        // Update track metadata if provided (e.g., YouTube match was completed)
+        const updates = {};
+        if (track.youtubeVideoId && !trackDoc.youtubeVideoId) {
+            updates.youtubeVideoId = track.youtubeVideoId;
+        }
+        if (track.albumImage && !trackDoc.albumImage) {
+            updates.albumImage = track.albumImage;
+        }
+        if (Object.keys(updates).length > 0) {
+            await Track.updateOne({ _id: trackDoc._id }, { $set: updates });
         }
 
-        // 2. Find or create the track
-        let trackDoc = await Track.findOne({ spotifyId: track.spotifyId });
-
-        if (!trackDoc) {
-            trackDoc = await Track.create({
-                name: track.name,
-                artists: track.artists || [],
-                album: track.album,
-                duration: track.duration,
-                spotifyId: track.spotifyId,
-                youtubeVideoId: track.youtubeVideoId || null,
-                albumImage: track.albumImage,
-            });
-        } else {
-            // Update track metadata if provided (e.g., YouTube match was completed)
-            const updates = {};
-            if (track.youtubeVideoId && !trackDoc.youtubeVideoId) {
-                updates.youtubeVideoId = track.youtubeVideoId;
-            }
-            if (track.albumImage && !trackDoc.albumImage) {
-                updates.albumImage = track.albumImage;
-            }
-            if (Object.keys(updates).length > 0) {
-                await Track.updateOne({ _id: trackDoc._id }, { $set: updates });
-            }
-        }
-
-        // 3. Add track to playlist if not already present
-        if (!likedPlaylist.tracks.includes(trackDoc._id)) {
-            likedPlaylist.tracks.push(trackDoc._id);
-            likedPlaylist.trackCount = likedPlaylist.tracks.length;
-            await likedPlaylist.save();
-        }
+        // 3. Add track atomically and keep trackCount in sync from persisted array size
+        const updatedPlaylist = await Playlist.findOneAndUpdate(
+            { _id: likedPlaylist._id },
+            [
+                { $set: { tracks: { $setUnion: ['$tracks', [trackDoc._id]] } } },
+                { $set: { trackCount: { $size: '$tracks' } } },
+            ],
+            { new: true }
+        ).select('_id');
 
         return res.status(200).json({
             success: true,
-            playlistId: likedPlaylist._id,
+            playlistId: updatedPlaylist?._id || likedPlaylist._id,
             trackId: trackDoc._id,
         });
     } catch (err) {
@@ -93,4 +70,64 @@ async function handler(req, res) {
     }
 }
 
-export default requireAuth(withRateLimit(handler, { maxRequests: 100, windowMs: 60000 }));
+export default requireAuth(withRateLimit(handler, 100, 60000));
+
+async function getOrCreateLikedPlaylist(userId) {
+    try {
+        const playlist = await Playlist.findOneAndUpdate(
+            { user: userId, spotifyPlaylistId: LIKED_PLAYLIST_ID },
+            {
+                $setOnInsert: {
+                    user: userId,
+                    name: 'Liked Songs',
+                    description: 'Your favorite tracks',
+                    spotifyPlaylistId: LIKED_PLAYLIST_ID,
+                    coverImage: '/liked-songs-icon.png',
+                    status: 'ready',
+                    trackCount: 0,
+                    tracks: [],
+                },
+            },
+            { new: true, upsert: true, setDefaultsOnInsert: true }
+        );
+        if (!playlist) throw new Error('Failed to resolve liked playlist');
+        return playlist;
+    } catch (err) {
+        if (err?.code === 11000) {
+            const existing = await Playlist.findOne({
+                user: userId,
+                spotifyPlaylistId: LIKED_PLAYLIST_ID,
+            });
+            if (existing) return existing;
+        }
+        throw err;
+    }
+}
+
+async function getOrCreateTrack(track) {
+    try {
+        const trackDoc = await Track.findOneAndUpdate(
+            { spotifyId: track.spotifyId },
+            {
+                $setOnInsert: {
+                    name: track.name,
+                    artists: track.artists || [],
+                    album: track.album,
+                    duration: track.duration,
+                    spotifyId: track.spotifyId,
+                    youtubeVideoId: track.youtubeVideoId || null,
+                    albumImage: track.albumImage,
+                },
+            },
+            { new: true, upsert: true, setDefaultsOnInsert: true }
+        );
+        if (!trackDoc) throw new Error('Failed to resolve track');
+        return trackDoc;
+    } catch (err) {
+        if (err?.code === 11000) {
+            const existing = await Track.findOne({ spotifyId: track.spotifyId });
+            if (existing) return existing;
+        }
+        throw err;
+    }
+}

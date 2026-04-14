@@ -1,4 +1,5 @@
 import { connectDB } from '@/lib/mongodb';
+import mongoose from 'mongoose';
 import { requireAuth } from '@/lib/requireAuth';
 import Playlist from '@/models/Playlist';
 import Track from '@/models/Track';
@@ -18,8 +19,9 @@ async function handler(req, res) {
     }
 
     const { trackId } = req.query;
+    const normalizedTrackId = Array.isArray(trackId) ? trackId[0] : trackId;
 
-    if (!trackId) {
+    if (!normalizedTrackId) {
         return res.status(400).json({ error: 'Missing trackId parameter' });
     }
 
@@ -39,36 +41,52 @@ async function handler(req, res) {
         }
 
         // 2. Find the track by _id, spotifyId, or youtubeVideoId
-        const track = await Track.findOne({
-            $or: [
-                { _id: trackId },
-                { spotifyId: trackId },
-                { youtubeVideoId: trackId },
-            ],
-        });
+        const trackLookup = [
+            { spotifyId: normalizedTrackId },
+            { youtubeVideoId: normalizedTrackId },
+        ];
+        if (mongoose.Types.ObjectId.isValid(normalizedTrackId)) {
+            trackLookup.push({ _id: normalizedTrackId });
+        }
+
+        const track = await Track.findOne({ $or: trackLookup }).select('_id');
 
         if (!track) {
             return res.status(404).json({ error: 'Track not found' });
         }
 
-        // 3. Remove track from playlist
-        const trackIndex = likedPlaylist.tracks.findIndex(
-            (id) => id.toString() === track._id.toString()
-        );
+        // 3. Remove track atomically and keep trackCount consistent with persisted array size
+        const updatedPlaylist = await Playlist.findOneAndUpdate(
+            {
+                _id: likedPlaylist._id,
+                tracks: track._id,
+            },
+            [
+                {
+                    $set: {
+                        tracks: {
+                            $filter: {
+                                input: '$tracks',
+                                as: 'existingTrackId',
+                                cond: { $ne: ['$$existingTrackId', track._id] },
+                            },
+                        },
+                    },
+                },
+                { $set: { trackCount: { $size: '$tracks' } } },
+            ],
+            { new: true }
+        ).select('_id');
 
-        if (trackIndex === -1) {
+        if (!updatedPlaylist) {
             return res
                 .status(404)
                 .json({ error: 'Track not in Liked Songs playlist' });
         }
 
-        likedPlaylist.tracks.splice(trackIndex, 1);
-        likedPlaylist.trackCount = likedPlaylist.tracks.length;
-        await likedPlaylist.save();
-
         return res.status(200).json({
             success: true,
-            playlistId: likedPlaylist._id,
+            playlistId: updatedPlaylist._id,
             trackId: track._id,
         });
     } catch (err) {

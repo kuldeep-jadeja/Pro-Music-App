@@ -22,6 +22,42 @@ const TrackSchema = new mongoose.Schema(
             default: null,
         },
         albumImage: String,
+        genres: {
+            type: [String],
+            default: [],
+        },
+        primaryGenre: {
+            type: String,
+            default: null,
+        },
+        metadataStatus: {
+            type: String,
+            enum: ['pending', 'partial', 'complete', 'failed'],
+            default: 'pending',
+        },
+        metadataUpdatedAt: {
+            type: Date,
+            default: null,
+        },
+        metadataAttempts: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+        genreConfidence: {
+            type: Number,
+            default: 0,
+            min: 0,
+            max: 1,
+        },
+        metadataFingerprint: {
+            type: String,
+            default: null,
+        },
+        metadataSources: {
+            genre: String,
+            album: String,
+        },
         importedAt: {
             type: Date,
             default: Date.now,
