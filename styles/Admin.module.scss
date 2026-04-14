@@ -1,0 +1,60 @@
+@use "variables" as *;
+
+// ── Admin Shell ───────────────────────────────────────────────
+.adminWrap {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 40px 24px;
+}
+
+.adminHeader {
+    margin-bottom: 32px;
+}
+
+.adminBadge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    background: rgba($accent, 0.15);
+    border: 1px solid rgba($accent, 0.25);
+    color: $accent-glow;
+    border-radius: $radius-full;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+}
+
+.adminTitle {
+    font-family: $font-display;
+    font-size: 1.75rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: $text-primary;
+    margin: 0 0 8px;
+}
+
+.adminSubtitle {
+    font-size: 0.9375rem;
+    color: $text-secondary;
+    margin: 0;
+
+    strong {
+        color: $text-primary;
+    }
+}
+
+.adminBody {
+    @include glass;
+    border-radius: $radius-xl;
+    padding: 40px 32px;
+}
+
+.adminPlaceholder {
+    color: $text-muted;
+    font-size: 0.9375rem;
+    text-align: center;
+    margin: 0;
+    padding: 24px 0;
+}
