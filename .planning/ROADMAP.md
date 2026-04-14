@@ -3,7 +3,7 @@
 ## Phases
 
 - [x] **Phase 1: Admin Access Control** - Only the configured admin can open and use artist-expansion surfaces. (completed 2026-04-14)
-- [ ] **Phase 2: Queue-Safe Job Actions** - Enqueue/retry flows are reliable, idempotent, and routed through existing queue orchestration.
+- [x] **Phase 2: Queue-Safe Job Actions** - Enqueue/retry flows are reliable, idempotent, and routed through existing queue orchestration. (completed 2026-04-14)
 - [ ] **Phase 3: Admin Expansion Dashboard** - Admin can view, filter, and act on artist expansion jobs with accurate state visibility.
 - [ ] **Phase 4: Worker Coexistence Hardening** - Existing worker-driven product behavior remains stable while expansion jobs run.
 
@@ -31,7 +31,7 @@ Plans:
   2. Bulk enqueue results show a per-artist outcome of queued, skipped, or failed.
   3. Admin can retry a failed expansion job and have it return to queue-based processing.
   4. Enqueue and retry actions use the existing worker orchestration path instead of bypassing it.
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 Plans:
 - [ ] 02-01-PLAN.md — Create ArtistJob model and artistExpandQueue Redis helper (foundation contracts)
 - [ ] 02-02-PLAN.md — Implement POST /api/admin/enqueue-artists with idempotent bulk enqueue
@@ -83,7 +83,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Admin Access Control | 2/2 | Complete   | 2026-04-14 |
-| 2. Queue-Safe Job Actions | 3/4 | In Progress|  |
+| 2. Queue-Safe Job Actions | 4/4 | Complete   | 2026-04-14 |
 | 3. Admin Expansion Dashboard | 0/3 | Not started | - |
 | 4. Worker Coexistence Hardening | 0/2 | Not started | - |
 

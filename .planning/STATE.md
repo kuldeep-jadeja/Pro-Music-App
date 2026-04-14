@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-last_updated: "2026-04-14T10:05:01.415Z"
+status: Phase complete — ready for verification
+last_updated: "2026-04-14T10:26:46.227Z"
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # STATE: Demus Admin Artist Expansion Controls
@@ -42,6 +42,7 @@ Plan: 4 of 4
 | Phase 02-queue-safe-job-actions P01 | 226 | 2 tasks | 2 files |
 | Phase 02-queue-safe-job-actions P03 | 720 | 1 tasks | 1 files |
 | Phase 02-queue-safe-job-actions P02 | 480 | 1 tasks | 1 files |
+| Phase 02-queue-safe-job-actions P04 | 644 | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -60,6 +61,7 @@ Plan: 4 of 4
 - [Phase 02-queue-safe-job-actions]: retry-jobs uses findOneAndUpdate({ _id, status: 'failed' }) for atomic reactivation with no new document creation; Redis rollback on enqueue failure prevents orphaned queued records
 - [Phase 02-queue-safe-job-actions]: Redis-first enqueue ordering before ArtistJob DB write prevents orphaned queued records when Redis is unavailable
 - [Phase 02-queue-safe-job-actions]: Done-status artists can be re-enqueued (pass the queued/running active-job check) — explicit admin intent to re-expand
+- [Phase 02-queue-safe-job-actions]: artistExpandWorker uses worker-local schema definitions to avoid @/ alias resolution in standalone CommonJS process; BLPOP timeout 30s; findOneAndUpdate({ status: 'queued' }) guard on pickup prevents double-processing; ytmatch enqueue capped at 50 per job; queue isolation: BLPOP on artist-expand only
 
 ### TODOs
 
