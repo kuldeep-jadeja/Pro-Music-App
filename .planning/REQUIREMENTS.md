@@ -7,7 +7,7 @@
 
 ### Admin Access
 
-- [ ] **ADMIN-01**: Admin can access artist expansion page only when authenticated as the configured admin email
+- [x] **ADMIN-01**: Admin can access artist expansion page only when authenticated as the configured admin email
 - [x] **ADMIN-02**: Non-admin authenticated users receive forbidden response for all admin artist-expansion APIs
 
 ### Queue Actions
@@ -49,7 +49,7 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ADMIN-01 | Phase 1 | Pending |
+| ADMIN-01 | Phase 1 | Complete |
 | ADMIN-02 | Phase 1 | Complete |
 | QUEUE-01 | Phase 3 | Pending |
 | QUEUE-02 | Phase 2 | Pending |

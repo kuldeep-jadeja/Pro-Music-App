@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-last_updated: "2026-04-14T08:16:56.076Z"
+status: Phase complete — ready for verification
+last_updated: "2026-04-14T08:29:31.105Z"
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # STATE: Demus Admin Artist Expansion Controls
@@ -38,6 +38,7 @@ Plan: 2 of 2
 | Phase Coverage | 100% |
 | Open Blockers | 0 |
 | Phase 01-admin-access-control P01 | 3min | 2 tasks | 5 files |
+| Phase 01-admin-access-control P02 | 7min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -48,6 +49,9 @@ Plan: 2 of 2
 - Deliver dashboard operations after queue-safe backend behavior is in place.
 - [Phase 01-admin-access-control]: requireAdmin composes requireAuth (no auth duplication); ADMIN_EMAIL fail-closed with one-time warn; catch-all /api/admin/* guard added for future-safety
 - [Phase 01-admin-access-control]: isAdmin returned in /api/auth/me payload (server-side only) to enable client conditional rendering without leaking ADMIN_EMAIL
+- [Phase 01-admin-access-control]: Edge middleware uses Web Crypto for JWT verification — jsonwebtoken is not edge-runtime compatible
+- [Phase 01-admin-access-control]: Email embedded in JWT at login so middleware can check admin identity without DB round-trip (fail-closed for old tokens)
+- [Phase 01-admin-access-control]: Defense-in-depth: middleware handles routing, getServerSideProps with requireAdmin handles server 403 for admin pages
 
 ### TODOs
 
