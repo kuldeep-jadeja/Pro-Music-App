@@ -35,6 +35,9 @@ export default function Home() {
 
   const router = useRouter();
   const displayName = user?.name || user?.email?.split('@')[0] || 'there';
+
+  // Show denial banner when redirected from a protected admin route
+  const adminAccessDenied = router.query.adminAccess === 'required';
   const isNewUser = !loadingPlaylists && (!playlists || playlists.length === 0);
 
   const matchedCount = !loadingTracks && tracks?.length > 0
@@ -53,6 +56,16 @@ export default function Home() {
         <link rel="icon" href="/favicon.ico" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
+
+      {/* Admin access denied — shown after redirect from any /admin/* route */}
+      {adminAccessDenied && (
+        <div className={styles.adminDeniedBanner} role="alert">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true" className={styles.adminDeniedIcon}>
+            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 14H9V9h2v6zm0-8H9V5h2v2z" />
+          </svg>
+          <span>Admin access required</span>
+        </div>
+      )}
 
       {/* While the session cookie is being verified, show nothing to prevent
           the guest CTA flashing briefly after login/signup redirect. */}

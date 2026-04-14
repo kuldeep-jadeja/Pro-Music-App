@@ -596,3 +596,23 @@
     color: rgba(white, 0.2);
     font-size: 0.75rem;
 }
+
+// ── Admin Access Denied Banner ───────────────────────────────
+.adminDeniedBanner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 18px;
+    background: rgba($danger, 0.1);
+    border: 1px solid rgba($danger, 0.25);
+    border-radius: $radius-lg;
+    color: $danger;
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 20px;
+}
+
+.adminDeniedIcon {
+    flex-shrink: 0;
+    color: $danger;
+}

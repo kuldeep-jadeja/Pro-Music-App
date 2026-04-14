@@ -136,6 +136,17 @@
     opacity: 0.7;
 }
 
+// Admin-only nav link — inherits .navItem, adds a subtle accent treatment
+.navItemAdmin {
+    color: $accent-glow;
+    margin-top: 4px;
+
+    &:hover {
+        background: rgba($accent, 0.12);
+        color: $accent-glow;
+    }
+}
+
 // ── Library (playlist list) ───────────────────────────────────
 .library {
     flex: 1;
