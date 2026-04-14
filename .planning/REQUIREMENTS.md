@@ -13,9 +13,9 @@
 ### Queue Actions
 
 - [ ] **QUEUE-01**: Admin can select multiple artists and bulk enqueue expansion jobs
-- [ ] **QUEUE-02**: Bulk enqueue is idempotent and does not create duplicate active jobs for the same artist
-- [ ] **QUEUE-03**: Bulk enqueue returns per-artist outcome (queued/skipped/failed)
-- [ ] **QUEUE-04**: Admin can retry failed artist expansion jobs
+- [x] **QUEUE-02**: Bulk enqueue is idempotent and does not create duplicate active jobs for the same artist
+- [x] **QUEUE-03**: Bulk enqueue returns per-artist outcome (queued/skipped/failed)
+- [x] **QUEUE-04**: Admin can retry failed artist expansion jobs
 
 ### Visibility
 
@@ -25,7 +25,7 @@
 
 ### Worker Integration
 
-- [ ] **SYNC-01**: Admin artist-expansion enqueue and retry flows reuse existing worker orchestration paths and do not bypass queue-based processing
+- [x] **SYNC-01**: Admin artist-expansion enqueue and retry flows reuse existing worker orchestration paths and do not bypass queue-based processing
 - [ ] **SYNC-02**: Existing background workers (`metadataWorker`, `artistCrawler`, `chartsWorker`, `ytMatchWorker`, and other active workers) continue processing without regression while admin expansion jobs are queued
 - [ ] **SYNC-03**: Artist expansion job status updates remain consistent with downstream worker outcomes (success/failure/retry) so dashboard state reflects real processing state
 
@@ -52,13 +52,13 @@
 | ADMIN-01 | Phase 1 | Complete |
 | ADMIN-02 | Phase 1 | Complete |
 | QUEUE-01 | Phase 3 | Pending |
-| QUEUE-02 | Phase 2 | Pending |
-| QUEUE-03 | Phase 2 | Pending |
-| QUEUE-04 | Phase 2 | Pending |
+| QUEUE-02 | Phase 2 | Complete |
+| QUEUE-03 | Phase 2 | Complete |
+| QUEUE-04 | Phase 2 | Complete |
 | VIS-01 | Phase 3 | Pending |
 | VIS-02 | Phase 3 | Pending |
 | VIS-03 | Phase 3 | Pending |
-| SYNC-01 | Phase 2 | Pending |
+| SYNC-01 | Phase 2 | Complete |
 | SYNC-02 | Phase 4 | Pending |
 | SYNC-03 | Phase 3 | Pending |
 

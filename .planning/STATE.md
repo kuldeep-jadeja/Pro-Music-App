@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to plan
-last_updated: "2026-04-14T08:40:01.078Z"
+status: Ready to execute
+last_updated: "2026-04-14T09:50:14.888Z"
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 6
+  completed_plans: 3
 ---
 
 # STATE: Demus Admin Artist Expansion Controls
@@ -21,8 +21,8 @@ progress:
 
 ## Current Position
 
-Phase: 2
-Plan: Not started
+Phase: 02 (queue-safe-job-actions) — EXECUTING
+Plan: 2 of 4
 
 - **Current Phase**: 1 - Admin Access Control
 - **Current Plan**: TBD
@@ -39,6 +39,7 @@ Plan: Not started
 | Open Blockers | 0 |
 | Phase 01-admin-access-control P01 | 3min | 2 tasks | 5 files |
 | Phase 01-admin-access-control P02 | 7min | 3 tasks | 9 files |
+| Phase 02-queue-safe-job-actions P01 | 226 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -52,6 +53,8 @@ Plan: Not started
 - [Phase 01-admin-access-control]: Edge middleware uses Web Crypto for JWT verification — jsonwebtoken is not edge-runtime compatible
 - [Phase 01-admin-access-control]: Email embedded in JWT at login so middleware can check admin identity without DB round-trip (fail-closed for old tokens)
 - [Phase 01-admin-access-control]: Defense-in-depth: middleware handles routing, getServerSideProps with requireAdmin handles server 403 for admin pages
+- [Phase 02-queue-safe-job-actions]: ArtistJob uses unique index on artistSpotifyId for DB-level idempotency; callers must catch E11000 and treat as already_active
+- [Phase 02-queue-safe-job-actions]: enqueueArtistExpand uses demus:artist-expand:queue isolated from ytmatch and metadata queues per SYNC-01 worker isolation requirement
 
 ### TODOs
 
