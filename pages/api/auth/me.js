@@ -1,5 +1,6 @@
 import { getUserFromRequest } from '@/lib/auth';
 import { connectDB } from '@/lib/mongodb';
+import { isAdminEmail } from '@/lib/adminAccess';
 
 /**
  * GET /api/auth/me
@@ -22,7 +23,7 @@ export default async function handler(req, res) {
         }
 
         return res.status(200).json({
-            user: { id: user._id, email: user.email },
+            user: { id: user._id, email: user.email, isAdmin: isAdminEmail(user.email) },
         });
     } catch (err) {
         console.error('[auth/me] error:', err);
