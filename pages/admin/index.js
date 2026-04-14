@@ -1,5 +1,5 @@
 import Head from 'next/head';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { requireAdmin } from '@/lib/requireAdmin';
 import styles from '@/styles/Admin.module.scss';
 
@@ -21,6 +21,8 @@ export default function AdminDashboard({ adminEmail }) {
     const [jobs, setJobs] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
+    const [retryFeedback, setRetryFeedback] = useState({});
+    const [retryInFlight, setRetryInFlight] = useState({});
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -30,42 +32,86 @@ export default function AdminDashboard({ adminEmail }) {
         return () => clearTimeout(timer);
     }, [query]);
 
-    useEffect(() => {
-        let cancelled = false;
-
-        async function fetchJobs() {
+    const fetchJobs = useCallback(async ({ silent = false } = {}) => {
+        if (!silent) {
             setIsLoading(true);
-            setLoadError('');
+        }
+        setLoadError('');
 
-            try {
-                const params = new URLSearchParams();
-                params.set('status', status);
-                params.set('q', debouncedQuery);
+        try {
+            const params = new URLSearchParams();
+            params.set('status', status);
+            params.set('q', debouncedQuery);
 
-                const response = await fetch(`/api/admin/artist-jobs?${params.toString()}`);
-                if (!response.ok) throw new Error('jobs_fetch_failed');
+            const response = await fetch(`/api/admin/artist-jobs?${params.toString()}`);
+            if (!response.ok) throw new Error('jobs_fetch_failed');
 
-                const data = await response.json();
-                if (!cancelled) {
-                    setJobs(Array.isArray(data.items) ? data.items : []);
-                }
-            } catch (error) {
-                if (!cancelled) {
-                    setJobs([]);
-                    setLoadError('We couldn’t load expansion jobs. Refresh the dashboard. If this persists, retry in a moment and check worker/DB health.');
-                }
-            } finally {
-                if (!cancelled) {
-                    setIsLoading(false);
-                }
+            const data = await response.json();
+            setJobs(Array.isArray(data.items) ? data.items : []);
+        } catch (error) {
+            setJobs([]);
+            setLoadError('We couldn’t load expansion jobs. Refresh the dashboard. If this persists, retry in a moment and check worker/DB health.');
+        } finally {
+            if (!silent) {
+                setIsLoading(false);
             }
         }
+    }, [jobs]);
 
+    useEffect(() => {
         fetchJobs();
+    }, [fetchJobs]);
 
-        return () => {
-            cancelled = true;
-        };
+    useEffect(() => {
+        const pollId = setInterval(() => {
+            fetchJobs({ silent: true });
+        }, 15000);
+
+        return () => clearInterval(pollId);
+    }, [fetchJobs]);
+
+    const handleRetry = useCallback(async (jobId) => {
+        const confirmed = window.confirm('Retry Failed Job: Requeue this failed expansion job now?');
+        if (!confirmed) return;
+
+        setRetryInFlight((prev) => ({ ...prev, [jobId]: true }));
+        setRetryFeedback((prev) => ({ ...prev, [jobId]: '' }));
+
+        try {
+            const response = await fetch('/api/admin/retry-jobs', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    jobIds: [jobId],
+                }),
+            });
+
+            const data = await response.json().catch(() => null);
+            const result = Array.isArray(data?.results) ? data.results.find((item) => item?.jobId === jobId) : null;
+            const reason = result?.reason || 'unknown';
+
+            setRetryFeedback((prev) => ({ ...prev, [jobId]: reason }));
+        } catch (error) {
+            setRetryFeedback((prev) => ({ ...prev, [jobId]: 'request_failed' }));
+        } finally {
+            setRetryInFlight((prev) => ({ ...prev, [jobId]: false }));
+            fetchJobs({ silent: true });
+        }
+    }, [fetchJobs]);
+
+    useEffect(() => {
+        setRetryFeedback((prev) => {
+            const activeJobIds = new Set(jobs.map((job) => String(job._id)));
+            const next = {};
+            for (const [jobId, message] of Object.entries(prev)) {
+                if (activeJobIds.has(jobId)) {
+                    next[jobId] = message;
+                }
+            }
+            return next;
+        });
     }, [status, debouncedQuery]);
 
     const hasActiveFilters = useMemo(() => status !== 'all' || debouncedQuery.length > 0, [status, debouncedQuery]);
@@ -156,7 +202,19 @@ export default function AdminDashboard({ adminEmail }) {
                                                 <td>{job.artistSpotifyId || '—'}</td>
                                                 <td>{job.updatedAt ? new Date(job.updatedAt).toLocaleString() : '—'}</td>
                                                 <td>{job.error || '—'}</td>
-                                                <td>—</td>
+                                                <td>
+                                                    <button
+                                                        className={styles.retryButton}
+                                                        type="button"
+                                                        disabled={job.status !== 'failed' || Boolean(retryInFlight[job._id])}
+                                                        onClick={() => handleRetry(job._id)}
+                                                    >
+                                                        Retry Failed Job
+                                                    </button>
+                                                    {retryFeedback[job._id] ? (
+                                                        <div className={styles.actionFeedback}>{retryFeedback[job._id]}</div>
+                                                    ) : null}
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>

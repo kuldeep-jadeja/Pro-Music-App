@@ -126,6 +126,30 @@
     background: rgba($bg-surface-2, 0.35);
 }
 
+.retryButton {
+    min-height: 32px;
+    border-radius: $radius-sm;
+    border: 1px solid rgba($border, 0.85);
+    background: rgba($bg-surface, 0.9);
+    color: $text-primary;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 6px 10px;
+    cursor: pointer;
+
+    &:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
+}
+
+.actionFeedback {
+    margin-top: 4px;
+    font-size: 0.75rem;
+    color: $text-muted;
+    word-break: break-word;
+}
+
 .emptyState,
 .infoState,
 .errorState {
