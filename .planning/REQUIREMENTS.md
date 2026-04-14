@@ -12,7 +12,7 @@
 
 ### Queue Actions
 
-- [ ] **QUEUE-01**: Admin can select multiple artists and bulk enqueue expansion jobs
+- [x] **QUEUE-01**: Admin can select multiple artists and bulk enqueue expansion jobs
 - [x] **QUEUE-02**: Bulk enqueue is idempotent and does not create duplicate active jobs for the same artist
 - [x] **QUEUE-03**: Bulk enqueue returns per-artist outcome (queued/skipped/failed)
 - [x] **QUEUE-04**: Admin can retry failed artist expansion jobs
@@ -51,7 +51,7 @@
 |-------------|-------|--------|
 | ADMIN-01 | Phase 1 | Complete |
 | ADMIN-02 | Phase 1 | Complete |
-| QUEUE-01 | Phase 3 | Pending |
+| QUEUE-01 | Phase 3 | Complete |
 | QUEUE-02 | Phase 2 | Complete |
 | QUEUE-03 | Phase 2 | Complete |
 | QUEUE-04 | Phase 2 | Complete |

@@ -4,7 +4,7 @@
 
 - [x] **Phase 1: Admin Access Control** - Only the configured admin can open and use artist-expansion surfaces. (completed 2026-04-14)
 - [x] **Phase 2: Queue-Safe Job Actions** - Enqueue/retry flows are reliable, idempotent, and routed through existing queue orchestration. (completed 2026-04-14)
-- [ ] **Phase 3: Admin Expansion Dashboard** - Admin can view, filter, and act on artist expansion jobs with accurate state visibility.
+- [x] **Phase 3: Admin Expansion Dashboard** - Admin can view, filter, and act on artist expansion jobs with accurate state visibility. (completed 2026-04-14)
 - [ ] **Phase 4: Worker Coexistence Hardening** - Existing worker-driven product behavior remains stable while expansion jobs run.
 
 ## Phase Details
@@ -48,11 +48,11 @@ Plans:
   3. Admin can select multiple artists and bulk queue expansion jobs from the dashboard.
   4. Failed jobs show failure reason and last updated time.
   5. Job status shown in the dashboard tracks real downstream worker outcomes, including retry transitions.
-**Plans:** 2/3 plans complete
+**Plans:** 3/3 plans complete
 Plans:
 - [x] 03-01-PLAN.md — Create shared dashboard contract constants and admin read API for artist jobs
 - [x] 03-02-PLAN.md — Implement `/admin` dashboard filters/table with server-truth job rendering
-- [ ] 03-03-PLAN.md — Add bulk queue + retry UX with polling synchronization
+- [x] 03-03-PLAN.md — Add bulk queue + retry UX with polling synchronization
 
 ### Phase 4: Worker Coexistence Hardening
 **Goal**: Expansion control operations coexist with current background worker behavior without regressions.
@@ -88,6 +88,6 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Admin Access Control | 2/2 | Complete   | 2026-04-14 |
 | 2. Queue-Safe Job Actions | 4/4 | Complete   | 2026-04-14 |
-| 3. Admin Expansion Dashboard | 2/3 | In Progress | - |
+| 3. Admin Expansion Dashboard | 3/3 | Complete | 2026-04-14 |
 | 4. Worker Coexistence Hardening | 0/2 | Not started | - |
 
