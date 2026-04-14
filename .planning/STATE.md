@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-last_updated: "2026-04-14T09:50:14.888Z"
+last_updated: "2026-04-14T10:05:01.415Z"
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 6
-  completed_plans: 3
+  completed_plans: 5
 ---
 
 # STATE: Demus Admin Artist Expansion Controls
@@ -22,7 +22,7 @@ progress:
 ## Current Position
 
 Phase: 02 (queue-safe-job-actions) — EXECUTING
-Plan: 2 of 4
+Plan: 4 of 4
 
 - **Current Phase**: 1 - Admin Access Control
 - **Current Plan**: TBD
@@ -40,6 +40,8 @@ Plan: 2 of 4
 | Phase 01-admin-access-control P01 | 3min | 2 tasks | 5 files |
 | Phase 01-admin-access-control P02 | 7min | 3 tasks | 9 files |
 | Phase 02-queue-safe-job-actions P01 | 226 | 2 tasks | 2 files |
+| Phase 02-queue-safe-job-actions P03 | 720 | 1 tasks | 1 files |
+| Phase 02-queue-safe-job-actions P02 | 480 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -55,6 +57,9 @@ Plan: 2 of 4
 - [Phase 01-admin-access-control]: Defense-in-depth: middleware handles routing, getServerSideProps with requireAdmin handles server 403 for admin pages
 - [Phase 02-queue-safe-job-actions]: ArtistJob uses unique index on artistSpotifyId for DB-level idempotency; callers must catch E11000 and treat as already_active
 - [Phase 02-queue-safe-job-actions]: enqueueArtistExpand uses demus:artist-expand:queue isolated from ytmatch and metadata queues per SYNC-01 worker isolation requirement
+- [Phase 02-queue-safe-job-actions]: retry-jobs uses findOneAndUpdate({ _id, status: 'failed' }) for atomic reactivation with no new document creation; Redis rollback on enqueue failure prevents orphaned queued records
+- [Phase 02-queue-safe-job-actions]: Redis-first enqueue ordering before ArtistJob DB write prevents orphaned queued records when Redis is unavailable
+- [Phase 02-queue-safe-job-actions]: Done-status artists can be re-enqueued (pass the queued/running active-job check) — explicit admin intent to re-expand
 
 ### TODOs
 

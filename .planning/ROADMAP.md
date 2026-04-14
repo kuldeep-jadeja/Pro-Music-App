@@ -31,7 +31,7 @@ Plans:
   2. Bulk enqueue results show a per-artist outcome of queued, skipped, or failed.
   3. Admin can retry a failed expansion job and have it return to queue-based processing.
   4. Enqueue and retry actions use the existing worker orchestration path instead of bypassing it.
-**Plans:** 1/4 plans executed
+**Plans:** 3/4 plans executed
 Plans:
 - [ ] 02-01-PLAN.md — Create ArtistJob model and artistExpandQueue Redis helper (foundation contracts)
 - [ ] 02-02-PLAN.md — Implement POST /api/admin/enqueue-artists with idempotent bulk enqueue
@@ -83,7 +83,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Admin Access Control | 2/2 | Complete   | 2026-04-14 |
-| 2. Queue-Safe Job Actions | 1/4 | In Progress|  |
+| 2. Queue-Safe Job Actions | 3/4 | In Progress|  |
 | 3. Admin Expansion Dashboard | 0/3 | Not started | - |
 | 4. Worker Coexistence Hardening | 0/2 | Not started | - |
 
