@@ -24,6 +24,8 @@ export default function AdminDashboard({ adminEmail }) {
     const [loadError, setLoadError] = useState('');
     const [retryFeedback, setRetryFeedback] = useState({});
     const [retryInFlight, setRetryInFlight] = useState({});
+    const [bulkInFlight, setBulkInFlight] = useState(false);
+    const [bulkResult, setBulkResult] = useState(null);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -138,6 +140,7 @@ export default function AdminDashboard({ adminEmail }) {
     const someVisibleSelected = useMemo(() => (
         visibleRows.some((row) => Boolean(selected[row.jobId]))
     ), [visibleRows, selected]);
+    const selectedCount = useMemo(() => Object.keys(selected).length, [selected]);
 
     const toggleRowSelection = useCallback((job) => {
         const jobId = String(job._id);
@@ -178,6 +181,68 @@ export default function AdminDashboard({ adminEmail }) {
         });
     }, [allVisibleSelected, visibleRows]);
 
+    const handleBulkQueue = useCallback(async () => {
+        const selectedArtists = Object.values(selected);
+        if (selectedArtists.length === 0 || bulkInFlight) return;
+
+        setBulkInFlight(true);
+
+        try {
+            const response = await fetch('/api/admin/enqueue-artists', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    artists: selectedArtists.map((artist) => ({
+                        spotifyId: artist.artistSpotifyId,
+                        name: artist.artistName,
+                    })),
+                }),
+            });
+
+            const data = await response.json().catch(() => null);
+            const summary = data?.summary || { total: 0, queued: 0, skipped: 0, failed: 0 };
+            const results = Array.isArray(data?.results) ? data.results : [];
+
+            setBulkResult({
+                summary,
+                results,
+            });
+
+            const queuedSpotifyIds = new Set(
+                results
+                    .filter((item) => item?.status === 'queued' && item?.artistSpotifyId)
+                    .map((item) => item.artistSpotifyId)
+            );
+
+            if (queuedSpotifyIds.size > 0) {
+                setSelected((prev) => {
+                    const next = { ...prev };
+                    for (const [jobId, artist] of Object.entries(prev)) {
+                        if (queuedSpotifyIds.has(artist?.artistSpotifyId)) {
+                            delete next[jobId];
+                        }
+                    }
+                    return next;
+                });
+            }
+
+            if (!response.ok) {
+                throw new Error('bulk_enqueue_failed');
+            }
+        } catch (error) {
+            setBulkResult({
+                summary: { total: 0, queued: 0, skipped: 0, failed: 0 },
+                results: [],
+                error: 'Bulk enqueue failed. Please retry.',
+            });
+        } finally {
+            setBulkInFlight(false);
+            fetchJobs({ silent: true });
+        }
+    }, [selected, bulkInFlight, fetchJobs]);
+
     return (
         <>
             <Head>
@@ -196,6 +261,40 @@ export default function AdminDashboard({ adminEmail }) {
 
                 <div className={styles.adminBody}>
                     <section className={styles.jobsSection}>
+                        <div className={styles.bulkControls}>
+                            <div className={styles.bulkSelectionMeta}>{selectedCount} selected</div>
+                            <button
+                                type="button"
+                                className={styles.bulkQueueButton}
+                                disabled={selectedCount === 0 || bulkInFlight}
+                                onClick={handleBulkQueue}
+                            >
+                                {bulkInFlight ? 'Queueing…' : 'Queue Selected Artists'}
+                            </button>
+                        </div>
+
+                        {bulkResult ? (
+                            <div className={styles.bulkResultPanel}>
+                                <div className={styles.bulkResultSummary}>
+                                    <strong>summary</strong> · total {bulkResult.summary?.total || 0} · queued {bulkResult.summary?.queued || 0} · skipped {bulkResult.summary?.skipped || 0} · failed {bulkResult.summary?.failed || 0}
+                                </div>
+                                {bulkResult.error ? (
+                                    <div className={styles.bulkResultError}>{bulkResult.error}</div>
+                                ) : null}
+                                {Array.isArray(bulkResult.results) && bulkResult.results.length > 0 ? (
+                                    <ul className={styles.bulkResultList}>
+                                        {bulkResult.results.map((item, index) => (
+                                            <li key={`${item.artistSpotifyId || item.artistName || 'artist'}-${index}`}>
+                                                <span className={styles.bulkResultArtist}>{item.artistName || item.artistSpotifyId || 'Unknown artist'}</span>
+                                                <span className={styles.bulkResultState}>{item.status || 'unknown'}</span>
+                                                <span className={styles.bulkResultReason}>{item.reason || 'unknown_reason'}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : null}
+                            </div>
+                        ) : null}
+
                         <div className={styles.filterBar}>
                             <label className={styles.filterLabel}>
                                 Status

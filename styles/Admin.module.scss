@@ -57,6 +57,84 @@
     gap: 16px;
 }
 
+.bulkControls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.bulkSelectionMeta {
+    font-size: 0.875rem;
+    color: $text-secondary;
+}
+
+.bulkQueueButton {
+    min-height: 44px;
+    padding: 10px 14px;
+    border-radius: $radius-md;
+    border: 1px solid rgba($accent, 0.5);
+    background: rgba($accent, 0.18);
+    color: $text-primary;
+    font-size: 0.875rem;
+    font-weight: 700;
+    cursor: pointer;
+
+    &:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
+}
+
+.bulkResultPanel {
+    border: 1px solid rgba($border, 0.8);
+    border-radius: $radius-lg;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.bulkResultSummary {
+    color: $text-secondary;
+    font-size: 0.8125rem;
+}
+
+.bulkResultError {
+    color: $danger;
+    font-size: 0.8125rem;
+}
+
+.bulkResultList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    li {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        gap: 8px;
+        font-size: 0.8125rem;
+        color: $text-secondary;
+    }
+}
+
+.bulkResultArtist {
+    color: $text-primary;
+}
+
+.bulkResultState {
+    text-transform: lowercase;
+}
+
+.bulkResultReason {
+    color: $text-muted;
+}
+
 .filterBar {
     display: grid;
     grid-template-columns: 160px minmax(0, 1fr);
