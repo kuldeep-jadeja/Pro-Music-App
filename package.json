@@ -12,6 +12,7 @@
         "metadata:coverage": "node scripts/metadataCoverageReport.js",
         "populate:charts": "node workers/chartsWorker.js",
         "crawl:artists": "node workers/artistCrawler.js",
+        "expand:worker": "node workers/artistExpandWorker.js",
         "repair:artists": "node scripts/repairEmptyArtists.js",
         "repair:albums": "node scripts/repairAlbumImages.js",
         "repair:all": "node scripts/repairMissingFields.js",
