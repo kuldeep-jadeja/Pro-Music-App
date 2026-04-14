@@ -23,7 +23,6 @@ export default function App({ Component, pageProps }) {
 
   return (
     <PlayerProvider>
-      <GlobalPlayer />
       <AppProvider>
         <Head>
           <title>Demus - Your Music, Your Way</title>
@@ -32,6 +31,7 @@ export default function App({ Component, pageProps }) {
           <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         </Head>
         {getLayout(<Component {...pageProps} />)}
+        <GlobalPlayer />
       </AppProvider>
     </PlayerProvider>
   );
