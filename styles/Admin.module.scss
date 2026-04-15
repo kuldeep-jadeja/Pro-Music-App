@@ -88,7 +88,7 @@
 }
 
 .bulkResultPanel {
-    border: 1px solid rgba($border, 0.8);
+    border: 1px solid rgba($border-subtle, 0.8);
     border-radius: $radius-lg;
     padding: 12px;
     display: flex;
@@ -154,7 +154,7 @@
 .filterInput {
     min-height: 40px;
     border-radius: $radius-md;
-    border: 1px solid rgba($border, 0.8);
+    border: 1px solid rgba($border-subtle, 0.8);
     background: rgba($bg-surface, 0.95);
     color: $text-primary;
     padding: 8px 12px;
@@ -168,7 +168,7 @@
 
 .tableWrap {
     overflow-x: auto;
-    border: 1px solid rgba($border, 0.8);
+    border: 1px solid rgba($border-subtle, 0.8);
     border-radius: $radius-lg;
 }
 
@@ -180,7 +180,7 @@
 }
 
 .table thead {
-    background: rgba($bg-surface-2, 0.9);
+    background: rgba($bg-surface-hover, 0.9);
 }
 
 .table thead th {
@@ -190,13 +190,13 @@
     text-transform: uppercase;
     color: $text-muted;
     padding: 12px 8px;
-    border-bottom: 1px solid rgba($border, 0.75);
+    border-bottom: 1px solid rgba($border-subtle, 0.75);
 }
 
 .table tbody td {
     color: $text-secondary;
     padding: 8px;
-    border-bottom: 1px solid rgba($border, 0.45);
+    border-bottom: 1px solid rgba($border-subtle, 0.45);
     vertical-align: top;
 }
 
@@ -222,13 +222,13 @@
 }
 
 .table tbody tr:hover {
-    background: rgba($bg-surface-2, 0.35);
+    background: rgba($bg-surface-hover, 0.35);
 }
 
 .retryButton {
     min-height: 32px;
     border-radius: $radius-sm;
-    border: 1px solid rgba($border, 0.85);
+    border: 1px solid rgba($border-subtle, 0.85);
     background: rgba($bg-surface, 0.9);
     color: $text-primary;
     font-size: 0.8125rem;
@@ -252,7 +252,7 @@
 .emptyState,
 .infoState,
 .errorState {
-    border: 1px solid rgba($border, 0.8);
+    border: 1px solid rgba($border-subtle, 0.8);
     border-radius: $radius-lg;
     padding: 16px;
 }
