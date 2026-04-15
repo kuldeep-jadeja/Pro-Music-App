@@ -88,6 +88,6 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Admin Access Control | 2/2 | Complete   | 2026-04-14 |
 | 2. Queue-Safe Job Actions | 4/4 | Complete   | 2026-04-14 |
-| 3. Admin Expansion Dashboard | 3/3 | Complete | 2026-04-14 |
+| 3. Admin Expansion Dashboard | 3/3 | Complete    | 2026-04-15 |
 | 4. Worker Coexistence Hardening | 0/2 | Not started | - |
 
