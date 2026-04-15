@@ -447,7 +447,9 @@ async function processJob(job, getData, redis) {
         devLog(`Expanding artist: ${artistName || artistSpotifyId}`);
         const tracks = await fetchArtistTracks(artistSpotifyId, getData);
         if (tracks.length === 0) {
-            logWarn(`No tracks found for artist ${artistSpotifyId}`);
+            const noTracksError = new Error(`No tracks found for artist ${artistSpotifyId}`);
+            noTracksError.code = 'no_tracks_found';
+            throw noTracksError;
         } else {
             await enrichTracks(tracks, 'artistExpandWorker');
             let inserted = 0;

@@ -3,6 +3,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { requireAdmin } from '@/lib/requireAdmin';
 import styles from '@/styles/Admin.module.scss';
 
+function normalizeArtistName(value) {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
 /**
  * /admin — Admin landing page
  *
@@ -50,7 +56,13 @@ export default function AdminDashboard({ adminEmail }) {
             if (!response.ok) throw new Error('jobs_fetch_failed');
 
             const data = await response.json();
-            setJobs(Array.isArray(data.items) ? data.items : []);
+            const normalizedItems = Array.isArray(data.items)
+                ? data.items.map((item) => ({
+                    ...item,
+                    artistName: normalizeArtistName(item?.artistName),
+                }))
+                : [];
+            setJobs(normalizedItems);
         } catch (error) {
             setJobs([]);
             setLoadError('We couldn’t load expansion jobs. Refresh the dashboard. If this persists, retry in a moment and check worker/DB health.');
@@ -376,25 +388,30 @@ export default function AdminDashboard({ adminEmail }) {
                                                         <input
                                                             type="checkbox"
                                                             checked={Boolean(selected[String(job._id)])}
+                                                            aria-label={`Select ${job.artistName || 'unknown artist'} (${job.artistSpotifyId || 'unknown Spotify ID'})`}
                                                             onChange={() => toggleRowSelection(job)}
                                                         />
-                                                        <span className={styles.checkboxLabel}>checkbox</span>
+                                                        <span className={styles.srOnly}>Select row</span>
                                                     </label>
                                                 </td>
                                                 <td>{job.status || '—'}</td>
-                                                <td>{job.artistName || '—'}</td>
+                                                <td>{job.artistName || 'Unknown artist'}</td>
                                                 <td>{job.artistSpotifyId || '—'}</td>
                                                 <td>{job.updatedAt ? new Date(job.updatedAt).toLocaleString() : '—'}</td>
                                                 <td>{job.error || '—'}</td>
                                                 <td>
-                                                    <button
-                                                        className={styles.retryButton}
-                                                        type="button"
-                                                        disabled={job.status !== 'failed' || Boolean(retryInFlight[job._id])}
-                                                        onClick={() => handleRetry(job._id)}
-                                                    >
-                                                        Retry Failed Job
-                                                    </button>
+                                                    {job.status === 'failed' ? (
+                                                        <button
+                                                            className={styles.retryButton}
+                                                            type="button"
+                                                            disabled={Boolean(retryInFlight[job._id])}
+                                                            onClick={() => handleRetry(job._id)}
+                                                        >
+                                                            Retry Failed Job
+                                                        </button>
+                                                    ) : (
+                                                        <span className={styles.actionPlaceholder}>—</span>
+                                                    )}
                                                     {retryFeedback[job._id] ? (
                                                         <div className={styles.actionFeedback}>{retryFeedback[job._id]}</div>
                                                     ) : null}

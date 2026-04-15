@@ -1,6 +1,7 @@
 import { requireAdmin } from '@/lib/requireAdmin';
 import { connectDB } from '@/lib/mongodb';
 import ArtistJob from '@/models/ArtistJob';
+import Track from '@/models/Track';
 import {
     DEFAULT_LIMIT,
     DEFAULT_QUERY,
@@ -8,6 +9,7 @@ import {
     MAX_LIMIT,
     isValidJobStatusFilter,
 } from '@/lib/admin/artistJobsContract';
+import { normalizeArtistName, resolveArtistTarget } from '@/lib/admin/resolveArtistTarget';
 
 function asSingleValue(value, fallback = '') {
     if (Array.isArray(value)) return value[0] ?? fallback;
@@ -17,6 +19,39 @@ function asSingleValue(value, fallback = '') {
 
 function escapeRegex(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function resolveArtistNameFromTrackCollection(artistSpotifyId) {
+    try {
+        const track = await Track.findOne({ spotifyId: artistSpotifyId })
+            .select({ artists: 1 })
+            .lean();
+        return normalizeArtistName(track?.artists?.[0]);
+    } catch (_) {
+        return null;
+    }
+}
+
+async function backfillMissingArtistNames(items) {
+    const missingNameItems = items.filter((item) => !normalizeArtistName(item.artistName) && item.artistSpotifyId);
+    if (missingNameItems.length === 0) return;
+
+    for (const item of missingNameItems) {
+        const resolvedTarget = await resolveArtistTarget({
+            spotifyId: item.artistSpotifyId,
+            artistName: item.artistName,
+        });
+        const resolvedName = resolvedTarget?.artistName || await resolveArtistNameFromTrackCollection(item.artistSpotifyId);
+        if (!resolvedName) continue;
+
+        item.artistName = resolvedName;
+        try {
+            await ArtistJob.updateOne(
+                { _id: item._id, $or: [{ artistName: null }, { artistName: '' }] },
+                { $set: { artistName: resolvedName } }
+            );
+        } catch (_) { /* non-blocking name backfill */ }
+    }
 }
 
 async function handler(req, res) {
@@ -74,6 +109,8 @@ async function handler(req, res) {
         .skip(skip)
         .limit(limit)
         .lean();
+
+    await backfillMissingArtistNames(items);
 
     return res.status(200).json({
         items,

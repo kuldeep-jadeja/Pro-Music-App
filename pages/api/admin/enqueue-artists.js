@@ -2,6 +2,7 @@ import { requireAdmin } from '@/lib/requireAdmin';
 import { connectDB } from '@/lib/mongodb';
 import ArtistJob from '@/models/ArtistJob';
 import { enqueueArtistExpand } from '@/lib/artistExpandQueue';
+import { resolveArtistTarget } from '@/lib/admin/resolveArtistTarget';
 
 /**
  * POST /api/admin/enqueue-artists
@@ -24,6 +25,7 @@ import { enqueueArtistExpand } from '@/lib/artistExpandQueue';
  *   queued           — successfully enqueued (new or re-enqueue from done/failed)
  *   already_active   — skipped because a queued or running job already exists
  *   missing_artist_id — failed because no spotifyId was provided
+ *   invalid_artist_spotify_id — failed because spotifyId could not resolve to an artist
  *   redis_unavailable — failed because Redis enqueue returned false (Redis down)
  *   db_error         — failed due to an unexpected MongoDB error
  *
@@ -47,40 +49,61 @@ async function handler(req, res) {
     const seen = new Set();
 
     for (const artist of artists) {
+        const requestedSpotifyId = typeof artist?.spotifyId === 'string' ? artist.spotifyId.trim() : '';
+
         // Step 1 — Validate required field
-        if (!artist.spotifyId) {
+        if (!requestedSpotifyId) {
             results.push({
                 artistSpotifyId: null,
-                artistName: artist.name || null,
+                artistName: null,
                 status: 'failed',
                 reason: 'missing_artist_id',
             });
             continue;
         }
 
-        // Step 2 — Within-payload deduplication
-        if (seen.has(artist.spotifyId)) {
+        // Step 1.5 — Resolve canonical artist target.
+        // Accept artist IDs directly, and remap track IDs to their primary artist ID.
+        const resolvedTarget = await resolveArtistTarget({
+            spotifyId: requestedSpotifyId,
+            artistName: artist?.name || null,
+        });
+        if (!resolvedTarget?.artistSpotifyId) {
             results.push({
-                artistSpotifyId: artist.spotifyId,
-                artistName: artist.name || null,
+                artistSpotifyId: requestedSpotifyId,
+                artistName: null,
+                status: 'failed',
+                reason: 'invalid_artist_spotify_id',
+            });
+            continue;
+        }
+
+        const artistSpotifyId = resolvedTarget.artistSpotifyId;
+        const artistName = resolvedTarget.artistName || null;
+
+        // Step 2 — Within-payload deduplication
+        if (seen.has(artistSpotifyId)) {
+            results.push({
+                artistSpotifyId,
+                artistName,
                 status: 'skipped',
                 reason: 'already_active',
             });
             continue;
         }
-        seen.add(artist.spotifyId);
+        seen.add(artistSpotifyId);
 
         // Step 3 — Atomic active-job check (QUEUE-02 idempotency guard)
         // Uses findOneAndUpdate so the check and any touch are atomic.
         const existingActive = await ArtistJob.findOneAndUpdate(
-            { artistSpotifyId: artist.spotifyId, status: { $in: ['queued', 'running'] } },
+            { artistSpotifyId, status: { $in: ['queued', 'running'] } },
             { $set: { updatedAt: new Date() } },
             { new: false }
         );
         if (existingActive) {
             results.push({
-                artistSpotifyId: artist.spotifyId,
-                artistName: artist.name || null,
+                artistSpotifyId,
+                artistName,
                 status: 'skipped',
                 reason: 'already_active',
             });
@@ -92,13 +115,13 @@ async function handler(req, res) {
         // We must NOT persist the ArtistJob as queued when Redis is down — the worker
         // will never pick it up (Redis is the delivery mechanism).
         const enqueued = await enqueueArtistExpand({
-            artistSpotifyId: artist.spotifyId,
-            artistName: artist.name || null,
+            artistSpotifyId,
+            artistName,
         });
         if (!enqueued) {
             results.push({
-                artistSpotifyId: artist.spotifyId,
-                artistName: artist.name || null,
+                artistSpotifyId,
+                artistName,
                 status: 'failed',
                 reason: 'redis_unavailable',
             });
@@ -111,17 +134,25 @@ async function handler(req, res) {
         // won't match and upsert will insert a new doc — the unique index catches that race
         // and throws E11000 (code 11000), which we handle below.
         try {
+            const setFields = {
+                status: 'queued',
+                queuedAt: new Date(),
+                error: null,
+            };
+            if (artistName) {
+                setFields.artistName = artistName;
+            }
+
             await ArtistJob.findOneAndUpdate(
-                { artistSpotifyId: artist.spotifyId, status: { $nin: ['queued', 'running'] } },
+                { artistSpotifyId, status: { $nin: ['queued', 'running'] } },
                 {
-                    $set: { status: 'queued', queuedAt: new Date(), error: null },
-                    $setOnInsert: { artistName: artist.name || null },
+                    $set: setFields,
                 },
                 { upsert: true, new: true }
             );
             results.push({
-                artistSpotifyId: artist.spotifyId,
-                artistName: artist.name || null,
+                artistSpotifyId,
+                artistName,
                 status: 'queued',
                 reason: 'queued',
             });
@@ -130,15 +161,15 @@ async function handler(req, res) {
                 // Concurrent upsert race — another request won and transitioned the job to
                 // queued/running between our active-job check and the upsert. Treat as skipped.
                 results.push({
-                    artistSpotifyId: artist.spotifyId,
-                    artistName: artist.name || null,
+                    artistSpotifyId,
+                    artistName,
                     status: 'skipped',
                     reason: 'already_active',
                 });
             } else {
                 results.push({
-                    artistSpotifyId: artist.spotifyId,
-                    artistName: artist.name || null,
+                    artistSpotifyId,
+                    artistName,
                     status: 'failed',
                     reason: 'db_error',
                 });

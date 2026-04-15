@@ -221,6 +221,18 @@
     font-size: 0.75rem;
 }
 
+.srOnly {
+    border: 0;
+    clip: rect(0, 0, 0, 0);
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+}
+
 .table tbody tr:hover {
     background: rgba($bg-surface-hover, 0.35);
 }
@@ -247,6 +259,10 @@
     font-size: 0.75rem;
     color: $text-muted;
     word-break: break-word;
+}
+
+.actionPlaceholder {
+    color: $text-muted;
 }
 
 .emptyState,
