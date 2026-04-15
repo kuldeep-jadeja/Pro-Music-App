@@ -71,6 +71,9 @@ const ARTIST_EXPAND_QUEUE_KEY = 'demus:artist-expand:queue';
 // MUST be 'demus:artist-expand:queue' — NOT 'demus:ytmatch:queue' (worker isolation per SYNC-01)
 const YTMATCH_QUEUE_KEY = 'demus:ytmatch:queue'; // used ONLY for rpush (outbound), never BLPOP
 const JOB_DELAY_MS = 500; // brief pause between jobs (ms)
+const ARTIST_EXPAND_YTMATCH_MAX_DEPTH = Math.max(1, Number.parseInt(process.env.ARTIST_EXPAND_YTMATCH_MAX_DEPTH || '200', 10) || 200);
+const ARTIST_EXPAND_BACKPRESSURE_SLEEP_MS = Math.max(50, Number.parseInt(process.env.ARTIST_EXPAND_BACKPRESSURE_SLEEP_MS || '500', 10) || 500);
+const ARTIST_EXPAND_BACKPRESSURE_MAX_WAIT_MS = Math.max(500, Number.parseInt(process.env.ARTIST_EXPAND_BACKPRESSURE_MAX_WAIT_MS || '120000', 10) || 120000);
 const isDev = process.env.NODE_ENV !== 'production';
 
 // ─── Logging helpers ──────────────────────────────────────────────────────────
@@ -164,6 +167,29 @@ async function enqueueMatchJob(redis, job) {
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+async function waitForYtmatchCapacity(redis, context = {}) {
+    const startedAt = Date.now();
+    while (true) {
+        const depth = await redis.llen(YTMATCH_QUEUE_KEY);
+        if (Number.isFinite(depth) && depth < ARTIST_EXPAND_YTMATCH_MAX_DEPTH) {
+            return {
+                depth,
+                waitedMs: Date.now() - startedAt,
+            };
+        }
+
+        const waitedMs = Date.now() - startedAt;
+        if (waitedMs >= ARTIST_EXPAND_BACKPRESSURE_MAX_WAIT_MS) {
+            const err = new Error(
+                `ytmatch_backpressure_timeout (depth=${depth}, maxDepth=${ARTIST_EXPAND_YTMATCH_MAX_DEPTH}, waitedMs=${waitedMs}, artist=${context.artistSpotifyId || 'unknown'}, track=${context.trackSpotifyId || 'unknown'})`
+            );
+            err.code = 'ytmatch_backpressure_timeout';
+            throw err;
+        }
+        await sleep(ARTIST_EXPAND_BACKPRESSURE_SLEEP_MS);
+    }
+}
 
 // ─── Track parsers (mirrors artistCrawler.js helpers) ────────────────────────
 
@@ -433,6 +459,10 @@ async function processJob(job, getData, redis) {
                     // Enqueue YouTube match for tracks missing videoId (up to 50 per job)
                     const saved = await Track.findOne({ spotifyId: track.spotifyId }).select('_id youtubeVideoId').lean();
                     if (saved && !saved.youtubeVideoId && matchesQueued < 50) {
+                        await waitForYtmatchCapacity(redis, {
+                            artistSpotifyId,
+                            trackSpotifyId: track.spotifyId,
+                        });
                         const q = await enqueueMatchJob(redis, {
                             trackId: saved._id.toString(),
                             name: track.name,
@@ -454,9 +484,10 @@ async function processJob(job, getData, redis) {
         );
     } catch (err) {
         logError(`Expansion failed for ${artistSpotifyId}:`, err);
+        const failureCode = err?.code || 'artist_expand_failed';
         await ArtistJob.findOneAndUpdate(
             { artistSpotifyId },
-            { $set: { status: 'failed', error: err.message, completedAt: new Date() } }
+            { $set: { status: 'failed', error: `${failureCode}: ${err.message}`, completedAt: new Date() } }
         );
     }
 }
