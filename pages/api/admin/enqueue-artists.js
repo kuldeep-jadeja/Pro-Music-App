@@ -98,7 +98,7 @@ async function handler(req, res) {
         const existingActive = await ArtistJob.findOneAndUpdate(
             { artistSpotifyId, status: { $in: ['queued', 'running'] } },
             { $set: { updatedAt: new Date() } },
-            { new: false }
+            { returnDocument: 'before' }
         );
         if (existingActive) {
             results.push({
@@ -148,7 +148,7 @@ async function handler(req, res) {
                 {
                     $set: setFields,
                 },
-                { upsert: true, new: true }
+                { upsert: true, returnDocument: 'after' }
             );
             results.push({
                 artistSpotifyId,

@@ -422,7 +422,7 @@ async function upsertTrack(track) {
     const existing = await Track.findOneAndUpdate(
         { spotifyId: track.spotifyId },
         updateOp,
-        { upsert: true, new: false }
+        { upsert: true, returnDocument: 'before' }
     );
     return !existing; // null return == newly inserted
 }
@@ -436,7 +436,7 @@ async function processJob(job, getData, redis) {
     const claimed = await ArtistJob.findOneAndUpdate(
         { artistSpotifyId, status: 'queued' },
         { $set: { status: 'running', startedAt: new Date() } },
-        { new: true }
+        { returnDocument: 'after' }
     );
     if (!claimed) {
         logWarn(`Job for ${artistSpotifyId} not in queued state — skipping`);

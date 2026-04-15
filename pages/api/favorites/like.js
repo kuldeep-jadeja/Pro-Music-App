@@ -56,7 +56,7 @@ async function handler(req, res) {
                 { $set: { tracks: { $setUnion: ['$tracks', [trackDoc._id]] } } },
                 { $set: { trackCount: { $size: '$tracks' } } },
             ],
-            { new: true }
+            { returnDocument: 'after' }
         ).select('_id');
 
         return res.status(200).json({
@@ -88,7 +88,7 @@ async function getOrCreateLikedPlaylist(userId) {
                     tracks: [],
                 },
             },
-            { new: true, upsert: true, setDefaultsOnInsert: true }
+            { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true }
         );
         if (!playlist) throw new Error('Failed to resolve liked playlist');
         return playlist;
@@ -119,7 +119,7 @@ async function getOrCreateTrack(track) {
                     albumImage: track.albumImage,
                 },
             },
-            { new: true, upsert: true, setDefaultsOnInsert: true }
+            { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true }
         );
         if (!trackDoc) throw new Error('Failed to resolve track');
         return trackDoc;

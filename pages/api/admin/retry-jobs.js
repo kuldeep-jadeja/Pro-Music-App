@@ -64,7 +64,7 @@ async function handler(req, res) {
         // Filter { _id: jobId, status: 'failed' } means:
         //   - Job exists AND is failed → updated is the updated document (proceed to enqueue)
         //   - Job not found OR status is not failed → updated is null (check which case below)
-        // findOneAndUpdate with { new: true } returns the UPDATED document on success.
+        // findOneAndUpdate with { returnDocument: 'after' } returns the UPDATED document on success.
         // A CastError is thrown for malformed ObjectId strings — caught and treated as invalid_job_id.
         let updated;
         try {
@@ -78,7 +78,7 @@ async function handler(req, res) {
                         error: null,
                     },
                 },
-                { new: true }
+                { returnDocument: 'after' }
             );
         } catch (err) {
             // Invalid ObjectId format throws CastError

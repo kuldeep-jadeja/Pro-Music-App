@@ -75,7 +75,7 @@ async function handler(req, res) {
                 },
                 { $set: { trackCount: { $size: '$tracks' } } },
             ],
-            { new: true }
+            { returnDocument: 'after' }
         ).select('_id');
 
         if (!updatedPlaylist) {

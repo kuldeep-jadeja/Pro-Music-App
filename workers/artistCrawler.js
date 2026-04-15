@@ -412,7 +412,7 @@ async function upsertTrack(track) {
     const existing = await Track.findOneAndUpdate(
         { spotifyId: track.spotifyId },
         updateOp,
-        { upsert: true, new: false }
+        { upsert: true, returnDocument: 'before' }
     );
     return !existing; // null return == newly inserted
 }
