@@ -61,7 +61,10 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. While admin queues artist expansion work, existing background workers continue processing normally without observable regressions.
   2. Core user flows that rely on existing workers remain functional during and after admin expansion queue activity.
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 04-01-PLAN.md — Build coexistence validation harness (contract + smoke checks + matrix runner)
+- [ ] 04-02-PLAN.md — Harden overlap behavior and package reportable verification workflow
 
 ## Requirement Coverage Map
 
@@ -90,4 +93,6 @@ Plans:
 | 2. Queue-Safe Job Actions | 4/4 | Complete   | 2026-04-14 |
 | 3. Admin Expansion Dashboard | 3/3 | Complete    | 2026-04-15 |
 | 4. Worker Coexistence Hardening | 0/2 | Not started | - |
+
+
 
