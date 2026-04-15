@@ -1,60 +1,221 @@
 @use "variables" as *;
 
-// ── Admin Shell ───────────────────────────────────────────────
-.adminWrap {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 40px 24px;
+// ── Keyframes ──────────────────────────────────────────────────
+
+@keyframes pulse-glow {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.35; }
 }
 
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.45; transform: scale(0.7); }
+}
+
+@keyframes slide-up {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+    0%   { background-position: -600px 0; }
+    100% { background-position:  600px 0; }
+}
+
+// ── Page Wrapper ───────────────────────────────────────────────
+
+.adminWrap {
+    max-width: 1260px;
+    margin: 0 auto;
+    padding: 48px 28px 80px;
+    animation: slide-up 0.45s $ease-out both;
+}
+
+// ── Header ─────────────────────────────────────────────────────
+
 .adminHeader {
-    margin-bottom: 32px;
+    margin-bottom: 36px;
+    position: relative;
+    padding-left: 20px;
+
+    // Vertical accent rule
+    &::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 2px;
+        height: calc(100% - 4px);
+        width: 3px;
+        border-radius: 2px;
+        background: linear-gradient(
+            180deg,
+            $accent 0%,
+            $accent-teal 55%,
+            transparent 100%
+        );
+    }
 }
 
 .adminBadge {
     display: inline-flex;
     align-items: center;
-    padding: 4px 10px;
-    background: rgba($accent, 0.15);
-    border: 1px solid rgba($accent, 0.25);
-    color: $accent-glow;
+    gap: 7px;
+    padding: 5px 11px;
     border-radius: $radius-full;
-    font-size: 0.6875rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin-bottom: 12px;
-}
-
-.adminTitle {
-    font-family: $font-display;
-    font-size: 1.75rem;
+    border: 1px solid rgba($accent, 0.38);
+    background: rgba($accent, 0.1);
+    color: rgba($accent-glow, 0.95);
+    font-size: 0.6rem;
     font-weight: 800;
-    letter-spacing: -0.03em;
-    color: $text-primary;
-    margin: 0 0 8px;
-}
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
 
-.adminSubtitle {
-    font-size: 0.9375rem;
-    color: $text-secondary;
-    margin: 0;
-
-    strong {
-        color: $text-primary;
+    &::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: $accent-glow;
+        box-shadow: 0 0 8px rgba($accent-glow, 0.9);
+        animation: pulse-glow 2s ease-in-out infinite;
+        flex-shrink: 0;
     }
 }
 
+.adminTitle {
+    margin: 0 0 10px;
+    font-family: $font-display;
+    font-size: clamp(1.9rem, 2.5vw + 0.8rem, 2.65rem);
+    letter-spacing: -0.045em;
+    line-height: 1.0;
+    background: linear-gradient(
+        128deg,
+        $text-primary 45%,
+        rgba($accent-teal, 0.75) 100%
+    );
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.adminSubtitle {
+    margin: 0 0 6px;
+    color: $text-secondary;
+    font-size: 0.9rem;
+
+    strong {
+        color: rgba($accent-teal, 0.9);
+        font-weight: 600;
+    }
+}
+
+.adminLead {
+    margin: 0;
+    max-width: 68ch;
+    color: rgba($text-muted, 0.8);
+    font-size: 0.87rem;
+    line-height: 1.6;
+}
+
+// ── Body Layout ────────────────────────────────────────────────
+
 .adminBody {
-    @include glass;
-    border-radius: $radius-xl;
-    padding: 32px 24px;
+    // Layout container only — no glass panel
 }
 
 .jobsSection {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
+}
+
+// ── Stats Grid ─────────────────────────────────────────────────
+
+.statsGrid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+}
+
+// Per-card semantic accent via CSS custom property
+.statCard:nth-child(1) { --card-accent: #{$accent};            --card-glow: #{rgba($accent, 0.18)}; }
+.statCard:nth-child(2) { --card-accent: #{$accent-teal};       --card-glow: #{rgba($accent-teal, 0.18)}; }
+.statCard:nth-child(3) { --card-accent: #{$warning};           --card-glow: #{rgba($warning, 0.15)}; }
+.statCard:nth-child(4) { --card-accent: #{$danger};            --card-glow: #{rgba($danger, 0.16)}; }
+.statCard:nth-child(5) { --card-accent: hsl(16, 80%, 56%);     --card-glow: rgba(200, 80, 40, 0.16); }
+
+.statCard {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(white, 0.07);
+    border-radius: $radius-xl;
+    padding: 16px 16px 14px;
+    background: rgba($bg-surface, 0.92);
+    min-height: 88px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: border-color $transition-fast, transform $transition-fast, box-shadow $transition-fast;
+    cursor: default;
+
+    // Top accent bar
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 2px;
+        background: var(--card-accent, #{$accent});
+        border-radius: 2px 2px 0 0;
+    }
+
+    // Background bloom
+    &::after {
+        content: '';
+        position: absolute;
+        top: -24px; right: -24px;
+        width: 90px; height: 90px;
+        border-radius: 50%;
+        background: radial-gradient(circle, var(--card-accent, #{$accent}) 0%, transparent 70%);
+        opacity: 0.13;
+        pointer-events: none;
+    }
+
+    &:hover {
+        border-color: rgba(white, 0.13);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+}
+
+.statLabel {
+    position: relative;
+    color: rgba($text-muted, 0.85);
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.statValue {
+    position: relative;
+    color: $text-primary;
+    font-size: clamp(1.35rem, 1.2vw + 0.9rem, 1.9rem);
+    font-family: $font-display;
+    letter-spacing: -0.035em;
+    line-height: 1;
+}
+
+// ── Control Panel ──────────────────────────────────────────────
+
+.controlPanel {
+    border: 1px solid rgba(white, 0.08);
+    border-radius: $radius-xl;
+    background: rgba($bg-surface, 0.75);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
+    overflow: hidden;
 }
 
 .bulkControls {
@@ -63,81 +224,202 @@
     justify-content: space-between;
     gap: 12px;
     flex-wrap: wrap;
+    padding: 13px 16px;
+    border-bottom: 1px solid rgba(white, 0.055);
+    background: rgba($bg-elevated, 0.55);
 }
 
 .bulkSelectionMeta {
-    font-size: 0.875rem;
-    color: $text-secondary;
+    color: rgba($text-muted, 0.9);
+    font-size: 0.82rem;
+
+    strong {
+        color: $text-primary;
+        font-family: $font-display;
+        font-size: 1rem;
+        letter-spacing: -0.02em;
+    }
 }
 
 .bulkActionGroup {
     display: flex;
     align-items: center;
-    gap: 8px;
     flex-wrap: wrap;
+    gap: 8px;
 }
 
-.bulkQueueButton {
-    min-height: 44px;
-    padding: 10px 14px;
+// ── Action Buttons ─────────────────────────────────────────────
+
+%action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    padding: 6px 14px;
     border-radius: $radius-md;
-    border: 1px solid rgba($accent, 0.5);
-    background: rgba($accent, 0.18);
-    color: $text-primary;
-    font-size: 0.875rem;
+    font-size: 0.74rem;
     font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     cursor: pointer;
+    transition:
+        background $transition-fast,
+        border-color $transition-fast,
+        box-shadow $transition-fast,
+        transform $transition-fast,
+        opacity $transition-fast;
+    white-space: nowrap;
+    border: 1px solid transparent;
+
+    &:hover:not(:disabled) {
+        transform: translateY(-1px);
+    }
+
+    &:active:not(:disabled) {
+        transform: translateY(0);
+    }
 
     &:disabled {
-        opacity: 0.45;
+        opacity: 0.32;
         cursor: not-allowed;
+        transform: none !important;
     }
 }
 
-.blockButton,
-.unblockButton {
-    min-height: 44px;
-    padding: 10px 14px;
-    border-radius: $radius-md;
-    font-size: 0.875rem;
-    font-weight: 700;
-    cursor: pointer;
+.bulkQueueButton {
+    @extend %action-btn;
+    background: linear-gradient(
+        130deg,
+        rgba($accent, 0.78) 0%,
+        rgba($accent-teal, 0.58) 100%
+    );
+    border-color: rgba($accent, 0.5);
+    color: white;
+    box-shadow: 0 1px 12px rgba($accent, 0.22);
 
-    &:disabled {
-        opacity: 0.45;
-        cursor: not-allowed;
+    &:hover:not(:disabled) {
+        background: linear-gradient(
+            130deg,
+            rgba($accent, 0.95) 0%,
+            rgba($accent-teal, 0.75) 100%
+        );
+        border-color: rgba($accent, 0.7);
+        box-shadow: 0 4px 18px rgba($accent, 0.38);
     }
 }
 
 .blockButton {
-    border: 1px solid rgba($danger, 0.55);
-    background: rgba($danger, 0.16);
-    color: $text-primary;
+    @extend %action-btn;
+    background: rgba($danger, 0.13);
+    border-color: rgba($danger, 0.38);
+    color: hsl(0, 90%, 72%);
+
+    &:hover:not(:disabled) {
+        background: rgba($danger, 0.22);
+        border-color: rgba($danger, 0.58);
+        box-shadow: 0 2px 12px rgba($danger, 0.2);
+    }
 }
 
 .unblockButton {
-    border: 1px solid rgba($success, 0.45);
-    background: rgba($success, 0.12);
+    @extend %action-btn;
+    background: rgba($success, 0.11);
+    border-color: rgba($success, 0.38);
+    color: hsl(145, 60%, 62%);
+
+    &:hover:not(:disabled) {
+        background: rgba($success, 0.2);
+        border-color: rgba($success, 0.55);
+        box-shadow: 0 2px 12px rgba($success, 0.18);
+    }
+}
+
+// ── Filter Bar ─────────────────────────────────────────────────
+
+.filterBar {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: 12px;
+    padding: 14px 16px;
+}
+
+.filterLabel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: rgba($text-muted, 0.85);
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 700;
+}
+
+.filterSelect,
+.filterInput {
+    min-height: 40px;
+    border-radius: $radius-md;
+    border: 1px solid rgba(white, 0.08);
+    background: rgba($bg-elevated, 0.75);
     color: $text-primary;
+    padding: 8px 12px;
+    font-size: 0.88rem;
+    font-family: $font-body;
+    transition: border-color $transition-fast, box-shadow $transition-fast;
+
+    option {
+        background: $bg-surface;
+        color: $text-primary;
+    }
+
+    &:focus-visible {
+        outline: none;
+        border-color: rgba($accent, 0.5);
+        box-shadow: 0 0 0 3px rgba($accent, 0.12);
+    }
+
+    &::placeholder {
+        color: rgba($text-muted, 0.6);
+    }
+}
+
+// ── Result Panels ──────────────────────────────────────────────
+
+.resultPanels {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    animation: slide-up 0.28s $ease-out both;
 }
 
 .bulkResultPanel {
-    border: 1px solid rgba($border-subtle, 0.8);
+    border: 1px solid rgba(white, 0.07);
     border-radius: $radius-lg;
-    padding: 12px;
+    padding: 14px 16px;
+    background: rgba($bg-surface, 0.82);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
 }
 
 .bulkResultSummary {
     color: $text-secondary;
-    font-size: 0.8125rem;
+    font-size: 0.8rem;
+    line-height: 1.65;
+
+    strong {
+        color: $text-primary;
+        font-family: $font-display;
+        letter-spacing: -0.01em;
+    }
 }
 
 .bulkResultError {
-    color: $danger;
-    font-size: 0.8125rem;
+    color: hsl(0, 90%, 72%);
+    font-size: 0.8rem;
+    padding: 8px 10px;
+    border-radius: $radius-sm;
+    background: rgba($danger, 0.1);
+    border: 1px solid rgba($danger, 0.3);
 }
 
 .bulkResultList {
@@ -146,113 +428,161 @@
     list-style: none;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
 
     li {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto auto;
-        gap: 8px;
-        font-size: 0.8125rem;
+        gap: 10px;
+        font-size: 0.76rem;
         color: $text-secondary;
+        padding: 6px 0;
+        border-top: 1px solid rgba(white, 0.04);
+        align-items: center;
     }
 }
 
 .bulkResultArtist {
     color: $text-primary;
+    font-weight: 600;
 }
 
 .bulkResultState {
     text-transform: lowercase;
-}
-
-.bulkResultReason {
+    font-size: 0.7rem;
     color: $text-muted;
 }
 
-.filterBar {
-    display: grid;
-    grid-template-columns: 160px minmax(0, 1fr);
-    gap: 16px;
+.bulkResultReason {
+    color: rgba($text-muted, 0.65);
+    font-size: 0.7rem;
+    font-family: 'Courier New', monospace;
 }
 
-.filterLabel {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    font-size: 0.875rem;
-    font-weight: 700;
-    color: $text-secondary;
-}
-
-.filterSelect,
-.filterInput {
-    min-height: 40px;
-    border-radius: $radius-md;
-    border: 1px solid rgba($border-subtle, 0.8);
-    background: rgba($bg-surface, 0.95);
-    color: $text-primary;
-    padding: 8px 12px;
-    font-size: 0.9375rem;
-
-    &:focus-visible {
-        outline: 2px solid rgba($accent, 0.45);
-        outline-offset: 1px;
-    }
-}
+// ── Table ──────────────────────────────────────────────────────
 
 .tableWrap {
     overflow-x: auto;
-    border: 1px solid rgba($border-subtle, 0.8);
-    border-radius: $radius-lg;
+    border: 1px solid rgba(white, 0.07);
+    border-radius: $radius-xl;
+    background: rgba($bg-primary, 0.85);
+
+    // Subtle gradient hint at top
+    background-image: linear-gradient(
+        180deg,
+        rgba($accent, 0.04) 0px,
+        transparent 72px
+    );
 }
 
 .table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.875rem;
-    line-height: 1.4;
+    min-width: 960px;
+    font-size: 0.85rem;
+    line-height: 1.35;
 }
 
 .table thead {
-    background: rgba($bg-surface-hover, 0.9);
+    border-bottom: 1px solid rgba(white, 0.07);
 }
 
 .table thead th {
     text-align: left;
-    font-size: 0.75rem;
-    letter-spacing: 0.04em;
+    color: rgba($text-muted, 0.75);
+    font-size: 0.63rem;
     text-transform: uppercase;
-    color: $text-muted;
-    padding: 12px 8px;
-    border-bottom: 1px solid rgba($border-subtle, 0.75);
+    letter-spacing: 0.1em;
+    font-weight: 700;
+    padding: 14px 12px;
+    white-space: nowrap;
+    background: rgba($bg-surface, 0.7);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    backdrop-filter: blur(12px);
+
+    &:first-child { padding-left: 18px; border-radius: $radius-xl 0 0 0; }
+    &:last-child  { padding-right: 18px; border-radius: 0 $radius-xl 0 0; }
 }
 
 .table tbody td {
     color: $text-secondary;
-    padding: 8px;
-    border-bottom: 1px solid rgba($border-subtle, 0.45);
-    vertical-align: top;
+    padding: 11px 12px;
+    border-bottom: 1px solid rgba(white, 0.04);
+    vertical-align: middle;
+
+    &:first-child { padding-left: 18px; }
+    &:last-child  { padding-right: 18px; }
 }
 
+.table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.table tbody tr {
+    transition: background $transition-fast;
+
+    &:hover {
+        background: rgba($accent, 0.055);
+    }
+}
+
+// Spotify ID column — monospace treatment
+.table tbody td:nth-child(4) {
+    font-family: 'Courier New', monospace;
+    font-size: 0.78rem;
+    color: rgba($text-muted, 0.8);
+    letter-spacing: -0.01em;
+}
+
+// Timestamp column
+.table tbody td:nth-child(5) {
+    font-size: 0.79rem;
+    color: rgba($text-muted, 0.85);
+    white-space: nowrap;
+}
+
+// Error column
+.table tbody td:nth-child(6) {
+    font-size: 0.79rem;
+    color: rgba($text-muted, 0.8);
+    max-width: 220px;
+}
+
+.rowBlocked {
+    background: rgba($danger, 0.045) !important;
+
+    &:hover {
+        background: rgba($danger, 0.075) !important;
+    }
+}
+
+// ── Checkbox ───────────────────────────────────────────────────
+
 .checkboxCell {
-    min-height: 44px;
-    min-width: 44px;
+    min-height: 40px;
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    color: $text-secondary;
-    font-size: 0.75rem;
+    color: rgba($text-muted, 0.8);
+    font-size: 0.67rem;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    font-weight: 700;
+    cursor: pointer;
+    user-select: none;
+
+    &:hover {
+        color: $text-secondary;
+    }
 }
 
 .checkboxCell input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     accent-color: $accent;
-}
-
-.checkboxLabel {
-    color: $text-muted;
-    font-size: 0.75rem;
+    cursor: pointer;
 }
 
 .srOnly {
@@ -267,90 +597,270 @@
     width: 1px;
 }
 
-.table tbody tr:hover {
-    background: rgba($bg-surface-hover, 0.35);
-}
+// ── Status Pills ───────────────────────────────────────────────
 
-.retryButton {
-    min-height: 32px;
-    border-radius: $radius-sm;
-    border: 1px solid rgba($border-subtle, 0.85);
+.statusPill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 110px;
+    border-radius: $radius-full;
+    padding: 4px 10px;
+    border: 1px solid rgba(white, 0.09);
     background: rgba($bg-surface, 0.9);
-    color: $text-primary;
-    font-size: 0.8125rem;
-    font-weight: 600;
-    padding: 6px 10px;
-    cursor: pointer;
+    color: $text-secondary;
+    font-size: 0.64rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 700;
 
-    &:disabled {
-        opacity: 0.45;
-        cursor: not-allowed;
+    // Status dot
+    &::before {
+        content: '';
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+        flex-shrink: 0;
     }
 }
 
-.actionFeedback {
-    margin-top: 4px;
-    font-size: 0.75rem;
-    color: $text-muted;
-    word-break: break-word;
+.statusReady {
+    border-color: rgba($accent-teal, 0.32);
+    background: rgba($accent-teal, 0.09);
+    color: hsl(185, 80%, 67%);
 }
 
-.actionPlaceholder {
-    color: $text-muted;
+.statusQueued {
+    border-color: rgba($accent, 0.38);
+    background: rgba($accent, 0.11);
+    color: hsl(258, 80%, 76%);
+}
+
+.statusRunning {
+    border-color: rgba($warning, 0.42);
+    background: rgba($warning, 0.11);
+    color: hsl(38, 92%, 64%);
+
+    &::before {
+        animation: pulse-dot 1.3s ease-in-out infinite;
+    }
+}
+
+.statusDone {
+    border-color: rgba($success, 0.38);
+    background: rgba($success, 0.1);
+    color: hsl(145, 60%, 58%);
+}
+
+.statusFailed {
+    border-color: rgba($danger, 0.42);
+    background: rgba($danger, 0.1);
+    color: hsl(0, 72%, 68%);
+}
+
+.statusBlocked {
+    border-color: rgba($danger, 0.48);
+    background: rgba($danger, 0.13);
+    color: hsl(0, 72%, 66%);
+}
+
+.statusUnknown {
+    border-color: rgba($text-muted, 0.25);
+    color: rgba($text-muted, 0.7);
+}
+
+// ── Artist Cell ────────────────────────────────────────────────
+
+.artistCell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.artistName {
+    color: $text-primary;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.artistHint {
+    color: hsl(0, 72%, 64%);
+    font-size: 0.7rem;
+}
+
+// ── Row Actions ────────────────────────────────────────────────
+
+.retryButton {
+    min-height: 30px;
+    padding: 5px 10px;
+    border-radius: $radius-sm;
+    border: 1px solid rgba($warning, 0.38);
+    background: rgba($warning, 0.09);
+    color: hsl(38, 92%, 63%);
+    font-size: 0.69rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all $transition-fast;
+
+    &:hover:not(:disabled) {
+        background: rgba($warning, 0.2);
+        border-color: rgba($warning, 0.58);
+        transform: translateY(-1px);
+        box-shadow: 0 2px 10px rgba($warning, 0.15);
+    }
+
+    &:disabled {
+        opacity: 0.38;
+        cursor: not-allowed;
+    }
 }
 
 .blockedBadge {
     display: inline-flex;
     align-items: center;
-    padding: 4px 8px;
+    gap: 5px;
+    padding: 4px 9px;
     border-radius: $radius-sm;
-    border: 1px solid rgba($danger, 0.5);
-    background: rgba($danger, 0.15);
-    color: $danger;
-    font-size: 0.75rem;
+    border: 1px solid rgba($danger, 0.32);
+    background: rgba($danger, 0.09);
+    color: hsl(0, 72%, 65%);
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
     font-weight: 700;
+
+    // Strikethrough-style x icon
+    &::before {
+        content: '×';
+        font-size: 0.85rem;
+        font-weight: 900;
+        line-height: 1;
+        margin-right: -1px;
+    }
 }
+
+.actionFeedback {
+    margin-top: 5px;
+    font-size: 0.7rem;
+    color: rgba($text-muted, 0.8);
+    word-break: break-word;
+    font-family: 'Courier New', monospace;
+}
+
+.actionPlaceholder {
+    color: rgba($text-muted, 0.38);
+    font-size: 1rem;
+}
+
+// ── State: Loading / Empty / Error ─────────────────────────────
 
 .emptyState,
 .infoState,
 .errorState {
-    border: 1px solid rgba($border-subtle, 0.8);
-    border-radius: $radius-lg;
-    padding: 16px;
+    border: 1px solid rgba(white, 0.07);
+    border-radius: $radius-xl;
+    padding: 52px 28px;
+    text-align: center;
+    background: rgba($bg-surface, 0.55);
+    animation: slide-up 0.3s $ease-out both;
 }
 
 .emptyState h2 {
-    margin: 0 0 8px;
-    font-size: 1rem;
+    margin: 0 0 10px;
     color: $text-primary;
+    font-family: $font-display;
+    font-size: 1.15rem;
+    letter-spacing: -0.025em;
 }
 
 .emptyState p {
     margin: 0;
-    color: $text-muted;
-    font-size: 0.9375rem;
+    color: rgba($text-muted, 0.8);
+    font-size: 0.88rem;
+    line-height: 1.6;
+    max-width: 42ch;
+    margin-inline: auto;
 }
 
 .infoState {
-    color: $text-secondary;
+    color: rgba($text-muted, 0.8);
+    font-size: 0.88rem;
+
+    // Shimmer loading bar as pseudo-element
+    position: relative;
+    overflow: hidden;
+
+    &::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+            90deg,
+            transparent 20%,
+            rgba(white, 0.025) 50%,
+            transparent 80%
+        );
+        background-size: 600px 100%;
+        animation: shimmer 2s ease-in-out infinite;
+        pointer-events: none;
+    }
 }
 
 .errorState {
-    color: $danger;
-    border-color: rgba($danger, 0.45);
+    color: hsl(0, 72%, 68%);
+    border-color: rgba($danger, 0.28);
+    background: rgba($danger, 0.05);
+    font-size: 0.88rem;
+    line-height: 1.55;
+}
+
+// ── Responsive ─────────────────────────────────────────────────
+
+@media (max-width: 1100px) {
+    .statsGrid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
 }
 
 @media (max-width: 860px) {
     .adminWrap {
-        padding: 32px 16px;
+        padding: 28px 16px 52px;
     }
 
-    .adminBody {
-        padding: 24px 16px;
+    .adminHeader {
+        padding-left: 16px;
+    }
+
+    .statsGrid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .filterBar {
         grid-template-columns: 1fr;
-        gap: 12px;
+    }
+
+    .resultPanels {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 560px) {
+    .statsGrid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .bulkActionGroup {
+        width: 100%;
+    }
+
+    .bulkQueueButton,
+    .blockButton,
+    .unblockButton {
+        flex: 1 1 auto;
+        text-align: center;
     }
 }

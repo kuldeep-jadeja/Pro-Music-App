@@ -9,6 +9,16 @@ function normalizeArtistName(value) {
     return trimmed.length > 0 ? trimmed : null;
 }
 
+function getDisplayStatus(job) {
+    if (job?.isBlocked) return 'do_not_expand';
+    if (job?.status === 'not_queued') return 'ready_to_queue';
+    return job?.status || 'unknown';
+}
+
+function formatStatusLabel(status) {
+    return String(status || 'unknown').replace(/_/g, ' ');
+}
+
 /**
  * /admin — Admin landing page
  *
@@ -163,6 +173,37 @@ export default function AdminDashboard({ adminEmail }) {
         () => Object.values(selected).filter((item) => !item?.isBlocked).length,
         [selected]
     );
+    const stats = useMemo(() => {
+        let blocked = 0;
+        let ready = 0;
+        let active = 0;
+        let failed = 0;
+
+        for (const job of jobs) {
+            const visualStatus = getDisplayStatus(job);
+            if (visualStatus === 'do_not_expand') blocked++;
+            if (visualStatus === 'ready_to_queue') ready++;
+            if (visualStatus === 'queued' || visualStatus === 'running') active++;
+            if (visualStatus === 'failed') failed++;
+        }
+
+        return {
+            total: jobs.length,
+            blocked,
+            ready,
+            active,
+            failed,
+        };
+    }, [jobs]);
+    const statusClassMap = {
+        do_not_expand: styles.statusBlocked,
+        ready_to_queue: styles.statusReady,
+        queued: styles.statusQueued,
+        running: styles.statusRunning,
+        done: styles.statusDone,
+        failed: styles.statusFailed,
+        unknown: styles.statusUnknown,
+    };
 
     const toggleRowSelection = useCallback((job) => {
         const jobId = String(job._id);
@@ -293,6 +334,9 @@ export default function AdminDashboard({ adminEmail }) {
 
             if (response.ok) {
                 setSelected({});
+                if (action === 'block') {
+                    setStatus('do_not_expand');
+                }
             }
         } catch (_) {
             setPolicyResult({
@@ -321,116 +365,151 @@ export default function AdminDashboard({ adminEmail }) {
                     <p className={styles.adminSubtitle}>
                         Signed in as <strong>{adminEmail}</strong>
                     </p>
+                    <p className={styles.adminLead}>
+                        Expansion command center: control queue flow, block unwanted artists, and monitor worker outcomes.
+                    </p>
                 </div>
 
                 <div className={styles.adminBody}>
-                    <section className={styles.jobsSection}>
-                        <div className={styles.bulkControls}>
-                            <div className={styles.bulkSelectionMeta}>{selectedCount} selected</div>
-                            <div className={styles.bulkActionGroup}>
-                                <button
-                                    type="button"
-                                    className={styles.bulkQueueButton}
-                                    disabled={selectedQueueableCount === 0 || bulkInFlight}
-                                    onClick={handleBulkQueue}
-                                >
-                                    {bulkInFlight ? 'Queueing…' : 'Queue Selected Artists'}
-                                </button>
-                                <button
-                                    type="button"
-                                    className={styles.blockButton}
-                                    disabled={selectedCount === 0 || policyInFlight}
-                                    onClick={() => handleBulkPolicy('block')}
-                                >
-                                    {policyInFlight ? 'Saving…' : 'Mark Do Not Expand'}
-                                </button>
-                                <button
-                                    type="button"
-                                    className={styles.unblockButton}
-                                    disabled={selectedCount === 0 || policyInFlight}
-                                    onClick={() => handleBulkPolicy('unblock')}
-                                >
-                                    {policyInFlight ? 'Saving…' : 'Remove Do Not Expand'}
-                                </button>
+                <section className={styles.jobsSection}>
+                        <div className={styles.statsGrid}>
+                            <article className={styles.statCard}>
+                                <span className={styles.statLabel}>visible artists</span>
+                                <strong className={styles.statValue}>{stats.total}</strong>
+                            </article>
+                            <article className={styles.statCard}>
+                                <span className={styles.statLabel}>ready to queue</span>
+                                <strong className={styles.statValue}>{stats.ready}</strong>
+                            </article>
+                            <article className={styles.statCard}>
+                                <span className={styles.statLabel}>active jobs</span>
+                                <strong className={styles.statValue}>{stats.active}</strong>
+                            </article>
+                            <article className={styles.statCard}>
+                                <span className={styles.statLabel}>do not expand</span>
+                                <strong className={styles.statValue}>{stats.blocked}</strong>
+                            </article>
+                            <article className={styles.statCard}>
+                                <span className={styles.statLabel}>failed jobs</span>
+                                <strong className={styles.statValue}>{stats.failed}</strong>
+                            </article>
+                        </div>
+
+                        <div className={styles.controlPanel}>
+                            <div className={styles.bulkControls}>
+                                <div className={styles.bulkSelectionMeta}>
+                                    <strong>{selectedCount}</strong> selected · <strong>{selectedQueueableCount}</strong> queueable
+                                </div>
+                                <div className={styles.bulkActionGroup}>
+                                    <button
+                                        type="button"
+                                        className={styles.bulkQueueButton}
+                                        disabled={selectedQueueableCount === 0 || bulkInFlight}
+                                        onClick={handleBulkQueue}
+                                    >
+                                        {bulkInFlight ? 'Queueing…' : 'Queue Selected Artists'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={styles.blockButton}
+                                        disabled={selectedCount === 0 || policyInFlight}
+                                        onClick={() => handleBulkPolicy('block')}
+                                    >
+                                        {policyInFlight ? 'Saving…' : 'Mark Do Not Expand'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={styles.unblockButton}
+                                        disabled={selectedCount === 0 || policyInFlight}
+                                        onClick={() => handleBulkPolicy('unblock')}
+                                    >
+                                        {policyInFlight ? 'Saving…' : 'Remove Do Not Expand'}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className={styles.filterBar}>
+                                <label className={styles.filterLabel}>
+                                    Status
+                                    <select
+                                        className={styles.filterSelect}
+                                        value={status}
+                                        onChange={(event) => setStatus(event.target.value)}
+                                    >
+                                        <option value="all">all</option>
+                                        <option value="queued">queued</option>
+                                        <option value="running">running</option>
+                                        <option value="done">done</option>
+                                        <option value="failed">failed</option>
+                                        <option value="do_not_expand">do not expand</option>
+                                    </select>
+                                </label>
+
+                                <label className={styles.filterLabel}>
+                                    Search
+                                    <input
+                                        className={styles.filterInput}
+                                        type="text"
+                                        value={query}
+                                        onChange={(event) => setQuery(event.target.value)}
+                                        placeholder="Search artist name or Spotify ID"
+                                    />
+                                </label>
                             </div>
                         </div>
 
-                        {bulkResult ? (
-                            <div className={styles.bulkResultPanel}>
-                                <div className={styles.bulkResultSummary}>
-                                    <strong>summary</strong> · total {bulkResult.summary?.total || 0} · queued {bulkResult.summary?.queued || 0} · skipped {bulkResult.summary?.skipped || 0} · failed {bulkResult.summary?.failed || 0}
-                                </div>
-                                {bulkResult.error ? (
-                                    <div className={styles.bulkResultError}>{bulkResult.error}</div>
+                        {(bulkResult || policyResult) ? (
+                            <div className={styles.resultPanels}>
+                                {bulkResult ? (
+                                    <div className={styles.bulkResultPanel}>
+                                        <div className={styles.bulkResultSummary}>
+                                            <strong>queue result</strong> · total {bulkResult.summary?.total || 0} · queued {bulkResult.summary?.queued || 0} · skipped {bulkResult.summary?.skipped || 0} · failed {bulkResult.summary?.failed || 0}
+                                        </div>
+                                        {bulkResult.error ? (
+                                            <div className={styles.bulkResultError}>{bulkResult.error}</div>
+                                        ) : null}
+                                        {Array.isArray(bulkResult.results) && bulkResult.results.length > 0 ? (
+                                            <ul className={styles.bulkResultList}>
+                                                {bulkResult.results.map((item, index) => (
+                                                    <li key={`${item.artistSpotifyId || item.artistName || 'artist'}-${index}`}>
+                                                        <span className={styles.bulkResultArtist}>{item.artistName || item.artistSpotifyId || 'Unknown artist'}</span>
+                                                        <span className={styles.bulkResultState}>{item.status || 'unknown'}</span>
+                                                        <span className={styles.bulkResultReason}>{item.reason || 'unknown_reason'}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        ) : null}
+                                    </div>
                                 ) : null}
-                                {Array.isArray(bulkResult.results) && bulkResult.results.length > 0 ? (
-                                    <ul className={styles.bulkResultList}>
-                                        {bulkResult.results.map((item, index) => (
-                                            <li key={`${item.artistSpotifyId || item.artistName || 'artist'}-${index}`}>
-                                                <span className={styles.bulkResultArtist}>{item.artistName || item.artistSpotifyId || 'Unknown artist'}</span>
-                                                <span className={styles.bulkResultState}>{item.status || 'unknown'}</span>
-                                                <span className={styles.bulkResultReason}>{item.reason || 'unknown_reason'}</span>
-                                            </li>
-                                        ))}
-                                    </ul>
+
+                                {policyResult ? (
+                                    <div className={styles.bulkResultPanel}>
+                                        <div className={styles.bulkResultSummary}>
+                                            <strong>{policyResult.action === 'block' ? 'policy update' : 'policy removal'}</strong>
+                                            {' '}· total {policyResult.summary?.total || 0}
+                                            {' '}· blocked {policyResult.summary?.blocked || 0}
+                                            {' '}· unblocked {policyResult.summary?.unblocked || 0}
+                                            {' '}· skipped {policyResult.summary?.skipped || 0}
+                                            {' '}· failed {policyResult.summary?.failed || 0}
+                                        </div>
+                                        {policyResult.error ? (
+                                            <div className={styles.bulkResultError}>{policyResult.error}</div>
+                                        ) : null}
+                                        {Array.isArray(policyResult.results) && policyResult.results.length > 0 ? (
+                                            <ul className={styles.bulkResultList}>
+                                                {policyResult.results.map((item, index) => (
+                                                    <li key={`${item.artistSpotifyId || item.artistName || 'artist'}-policy-${index}`}>
+                                                        <span className={styles.bulkResultArtist}>{item.artistName || item.artistSpotifyId || 'Unknown artist'}</span>
+                                                        <span className={styles.bulkResultState}>{item.status || 'unknown'}</span>
+                                                        <span className={styles.bulkResultReason}>{item.reason || 'unknown_reason'}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        ) : null}
+                                    </div>
                                 ) : null}
                             </div>
                         ) : null}
-
-                        {policyResult ? (
-                            <div className={styles.bulkResultPanel}>
-                                <div className={styles.bulkResultSummary}>
-                                    <strong>{policyResult.action === 'block' ? 'blocklist' : 'unblock'}</strong>
-                                    {' '}· total {policyResult.summary?.total || 0}
-                                    {' '}· blocked {policyResult.summary?.blocked || 0}
-                                    {' '}· unblocked {policyResult.summary?.unblocked || 0}
-                                    {' '}· skipped {policyResult.summary?.skipped || 0}
-                                    {' '}· failed {policyResult.summary?.failed || 0}
-                                </div>
-                                {policyResult.error ? (
-                                    <div className={styles.bulkResultError}>{policyResult.error}</div>
-                                ) : null}
-                                {Array.isArray(policyResult.results) && policyResult.results.length > 0 ? (
-                                    <ul className={styles.bulkResultList}>
-                                        {policyResult.results.map((item, index) => (
-                                            <li key={`${item.artistSpotifyId || item.artistName || 'artist'}-policy-${index}`}>
-                                                <span className={styles.bulkResultArtist}>{item.artistName || item.artistSpotifyId || 'Unknown artist'}</span>
-                                                <span className={styles.bulkResultState}>{item.status || 'unknown'}</span>
-                                                <span className={styles.bulkResultReason}>{item.reason || 'unknown_reason'}</span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                ) : null}
-                            </div>
-                        ) : null}
-
-                        <div className={styles.filterBar}>
-                            <label className={styles.filterLabel}>
-                                Status
-                                <select
-                                    className={styles.filterSelect}
-                                    value={status}
-                                    onChange={(event) => setStatus(event.target.value)}
-                                >
-                                    <option value="all">all</option>
-                                    <option value="queued">queued</option>
-                                    <option value="running">running</option>
-                                    <option value="done">done</option>
-                                    <option value="failed">failed</option>
-                                </select>
-                            </label>
-
-                            <label className={styles.filterLabel}>
-                                Search
-                                <input
-                                    className={styles.filterInput}
-                                    type="text"
-                                    value={query}
-                                    onChange={(event) => setQuery(event.target.value)}
-                                    placeholder="Search artist name or Spotify ID"
-                                />
-                            </label>
-                        </div>
 
                         {isLoading ? (
                             <div className={styles.infoState}>Loading expansion jobs...</div>
@@ -478,8 +557,15 @@ export default function AdminDashboard({ adminEmail }) {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {jobs.map((job) => (
-                                            <tr key={job._id}>
+                                        {jobs.map((job) => {
+                                            const displayStatus = getDisplayStatus(job);
+                                            const statusClass = statusClassMap[displayStatus] || styles.statusUnknown;
+
+                                            return (
+                                            <tr
+                                                key={job._id}
+                                                className={job.isBlocked ? styles.rowBlocked : ''}
+                                            >
                                                 <td>
                                                     <label className={styles.checkboxCell}>
                                                         <input
@@ -491,8 +577,19 @@ export default function AdminDashboard({ adminEmail }) {
                                                         <span className={styles.srOnly}>Select row</span>
                                                     </label>
                                                 </td>
-                                                <td>{job.isBlocked ? 'do_not_expand' : (job.status === 'not_queued' ? 'ready_to_queue' : (job.status || '—'))}</td>
-                                                <td>{job.artistName || 'Unknown artist'}</td>
+                                                <td>
+                                                    <span className={`${styles.statusPill} ${statusClass}`}>
+                                                        {formatStatusLabel(displayStatus)}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <div className={styles.artistCell}>
+                                                        <span className={styles.artistName}>{job.artistName || 'Unknown artist'}</span>
+                                                        {job.isBlocked ? (
+                                                            <span className={styles.artistHint}>Excluded from cron expansion</span>
+                                                        ) : null}
+                                                    </div>
+                                                </td>
                                                 <td>{job.artistSpotifyId || job.queueSpotifyId || '—'}</td>
                                                 <td>{job.updatedAt ? new Date(job.updatedAt).toLocaleString() : '—'}</td>
                                                 <td>{job.error || (job.isBlocked ? 'blocked by admin' : '—')}</td>
@@ -516,12 +613,13 @@ export default function AdminDashboard({ adminEmail }) {
                                                     ) : null}
                                                 </td>
                                             </tr>
-                                        ))}
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             </div>
                         ) : null}
-                    </section>
+                </section>
                 </div>
             </div>
         </>

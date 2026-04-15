@@ -52,6 +52,7 @@ const mongoose = require('mongoose');
 const MONGODB_URI = process.env.MONGODB_URI;
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 const QUEUE_KEY = 'demus:ytmatch:queue';
+const METADATA_QUEUE_KEY = 'demus:metadata:queue';
 
 // ─── Safety limits ────────────────────────────────────────────────────────────
 const MAX_ARTISTS_PER_RUN = 20;
@@ -134,7 +135,7 @@ async function isArtistNameBlocked(artistName) {
     return Boolean(blocked);
 }
 
-// ─── Redis enqueue helper ─────────────────────────────────────────────────────
+// ─── Redis enqueue helpers ────────────────────────────────────────────────────
 async function enqueueMatchJob(redis, job) {
     if (!redis) return false;
     try {
@@ -143,6 +144,25 @@ async function enqueueMatchJob(redis, job) {
     } catch (err) {
         console.warn('[artistCrawler] Failed to enqueue match job:', err.message);
         return false;
+    }
+}
+
+async function enqueueGenreJobs(redis, tracks) {
+    if (!redis) return;
+    for (const track of tracks) {
+        if (!track._lastfmTags?.length || !track.spotifyId) continue;
+        try {
+            await redis.rpush(METADATA_QUEUE_KEY, JSON.stringify({
+                spotifyId: track.spotifyId,
+                computedMetadata: {
+                    genres: track._lastfmTags,
+                    primaryGenre: track._lastfmTags[0],
+                    metadataSources: { genre: 'lastfm' },
+                },
+            }));
+        } catch (err) {
+            console.warn(`[artistCrawler] Failed to enqueue genre job for ${track.spotifyId}:`, err.message);
+        }
     }
 }
 
@@ -281,131 +301,10 @@ async function fetchArtistTracks(artistId, getData) {
     return [];
 }
 
-// ─── 3-tier metadata enrichment (mirrors lib/spotify.js) ───────────────────────
-//
-// Runs BEFORE upsert so new tracks are saved with full album + art data.
-// Tier 1 — iTunes Search API   (fast, concurrent, great mainstream coverage)
-//           Tries cleaned name first (strips feat./version), falls back to full name.
-// Tier 2 — MusicBrainz + CAA   (serialised at 1 req/s, last resort)
-//
-// NOTE: Spotify OG scrape was Tier 2 but Spotify moved to a full SPA so the
-//       HTML response no longer contains OG meta tags.  Removed.
+// ─── Metadata enrichment (5-tier waterfall: iTunes → Deezer → TheAudioDB → Last.fm → MusicBrainz)
+const { enrichTracks } = require('./lib/enrichment');
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-/** Strip featured-artist suffixes and version tags that confuse search engines. */
-function cleanTrackName(name) {
-    return name
-        .replace(/\s*[\(\[](feat|ft|with|prod)[^\)\]]*[\)\]]/gi, '')
-        .replace(/\s*-\s*(radio|acoustic|live|demo|remix|remaster(?:ed)?|version|edit|extended|alt(?:ernate)?).*$/gi, '')
-        .replace(/\s*\([^)]*\)\s*$/, '') // trailing parenthetical
-        .trim();
-}
-
-async function fetchFromItunes(track) {
-    const MAX_RETRIES = 3;
-    const artist = track.artists?.[0] || '';
-    const cleanName = cleanTrackName(track.name);
-    const queries = cleanName !== track.name
-        ? [`${artist} ${cleanName}`, `${artist} ${track.name}`]
-        : [`${artist} ${track.name}`];
-
-    for (const queryStr of queries) {
-        const url = `https://itunes.apple.com/search?term=${encodeURIComponent(queryStr)}&media=music&entity=song&limit=1&country=US`;
-        let attempt = 0;
-        while (attempt < MAX_RETRIES) {
-            try {
-                const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-                if (res.status === 403) {
-                    console.warn('[artistCrawler] iTunes 403 — rate-limited, skipping iTunes tier');
-                    return false;
-                }
-                if (res.status === 429 || res.status >= 500) {
-                    await sleep(500 * Math.pow(2, attempt));
-                    attempt++;
-                    continue;
-                }
-                if (!res.ok) break;
-                const body = await res.text();
-                if (!body) break;
-                const json = JSON.parse(body);
-                const result = json.results?.[0];
-                if (!result) break;
-                if (!track.album || track.album === 'Unknown Album')
-                    track.album = result.collectionName || track.album;
-                if (!track.albumImage && result.artworkUrl100)
-                    track.albumImage = result.artworkUrl100.replace('100x100bb', '600x600bb');
-                return !!(track.album && track.albumImage);
-            } catch (err) {
-                if (attempt < MAX_RETRIES - 1) await sleep(500 * Math.pow(2, attempt));
-                attempt++;
-            }
-        }
-    }
-    return false;
-}
-
-async function fetchFromMusicBrainz(track) {
-    const artist = track.artists?.[0] || '';
-    const query = encodeURIComponent(`recording:"${track.name}" AND artist:"${artist}"`);
-    const headers = { 'User-Agent': 'ProMusicApp/1.0 (https://github.com/pro-music-app)' };
-    try {
-        const res = await fetch(
-            `https://musicbrainz.org/ws/2/recording/?query=${query}&fmt=json&limit=10&inc=releases+release-groups`,
-            { signal: AbortSignal.timeout(12000), headers }
-        );
-        if (!res.ok) return false;
-        const json = await res.json();
-        let bestRelease = null;
-        for (const recording of json.recordings?.slice(0, 5) ?? []) {
-            const releases = recording.releases ?? [];
-            const candidate =
-                releases.find(r => r.status === 'Official' && r['release-group']?.['primary-type'] === 'Album' && !(r['release-group']?.['secondary-types'] ?? []).some(s => ['Live', 'Compilation', 'Soundtrack', 'Remix'].includes(s))) ||
-                releases.find(r => r.status === 'Official' && r['release-group']?.['primary-type'] === 'Album') ||
-                releases.find(r => r.status === 'Official') ||
-                releases[0];
-            if (candidate && candidate.status !== 'Bootleg') { bestRelease = candidate; break; }
-        }
-        if (!bestRelease) return false;
-        if (!track.album || track.album === 'Unknown Album') track.album = bestRelease.title || track.album;
-        if (!track.albumImage && bestRelease.id) {
-            try {
-                const caaRes = await fetch(`https://coverartarchive.org/release/${bestRelease.id}`, { signal: AbortSignal.timeout(8000), headers });
-                if (caaRes.ok) {
-                    const caaJson = await caaRes.json();
-                    const img = caaJson.images?.find(i => i.front) || caaJson.images?.[0];
-                    if (img) track.albumImage = img.thumbnails?.['500'] || img.thumbnails?.large || img.image || null;
-                }
-            } catch (_) { /* non-fatal */ }
-        }
-        return !!(track.album && track.albumImage);
-    } catch (err) {
-        console.warn(`[artistCrawler] MusicBrainz error for "${track.name}":`, err.message);
-        return false;
-    }
-}
-
-async function enrichTracks(tracks, tag) {
-    const needsWork = tracks.filter(t => !t.albumImage || !t.album || t.album === 'Unknown Album');
-    if (needsWork.length === 0) return;
-    console.log(`[${tag}] Enriching ${needsWork.length} track(s) missing album/image...`);
-
-    // Tier 1: iTunes (5 concurrent, 300 ms between batches)
-    for (let i = 0; i < needsWork.length; i += 5) {
-        await Promise.all(needsWork.slice(i, i + 5).map(fetchFromItunes));
-        if (i + 5 < needsWork.length) await sleep(300);
-    }
-
-    const afterItunes = needsWork.filter(t => !t.albumImage || !t.album || t.album === 'Unknown Album');
-    if (afterItunes.length === 0) { console.log(`[${tag}] iTunes resolved all.`); return; }
-    console.log(`[${tag}] iTunes missed ${afterItunes.length} — trying MusicBrainz...`);
-
-    // Tier 2: MusicBrainz (serialised, 1100 ms apart)
-    for (let i = 0; i < afterItunes.length; i++) {
-        await fetchFromMusicBrainz(afterItunes[i]);
-        if (i < afterItunes.length - 1) await sleep(1100);
-    }
-}
 
 // ─── Upsert helper ────────────────────────────────────────────────────────────
 
@@ -565,6 +464,7 @@ async function run() {
 
         // Enrich tracks missing album/albumImage before saving
         await enrichTracks(albumTracks, 'artistCrawler');
+        await enqueueGenreJobs(redis, albumTracks);
 
         for (const track of albumTracks) {
             if (trackCount >= MAX_TRACKS_PER_RUN) break;

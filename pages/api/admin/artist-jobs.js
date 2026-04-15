@@ -86,6 +86,49 @@ async function listArtistCandidates(limit) {
     }));
 }
 
+async function listBlockedArtists({ q, limit, skip }) {
+    const filter = {};
+    if (q) {
+        const escaped = escapeRegex(q);
+        filter.$or = [
+            { artistName: { $regex: escaped, $options: 'i' } },
+            { artistSpotifyId: { $regex: escaped, $options: 'i' } },
+        ];
+    }
+
+    const total = await ArtistExpandBlock.countDocuments(filter);
+    const docs = await ArtistExpandBlock.find(filter)
+        .select({
+            artistName: 1,
+            artistSpotifyId: 1,
+            updatedAt: 1,
+            createdAt: 1,
+        })
+        .sort({ updatedAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+
+    const items = docs.map((doc) => ({
+        _id: `blocked:${doc._id}`,
+        artistName: doc.artistName || null,
+        artistSpotifyId: doc.artistSpotifyId || null,
+        queueSpotifyId: doc.artistSpotifyId || null,
+        status: 'not_queued',
+        error: null,
+        updatedAt: doc.updatedAt || doc.createdAt || null,
+        queuedAt: null,
+        startedAt: null,
+        completedAt: null,
+        retriedAt: null,
+        isCandidate: true,
+        isBlocked: true,
+        blockedAt: doc.updatedAt || doc.createdAt || null,
+    }));
+
+    return { items, total };
+}
+
 async function resolveArtistNameFromTrackCollection(artistSpotifyId) {
     try {
         const track = await Track.findOne({ spotifyId: artistSpotifyId })
@@ -194,7 +237,7 @@ async function handler(req, res) {
 
     const filter = {};
 
-    if (status !== DEFAULT_STATUS_FILTER) {
+    if (status !== DEFAULT_STATUS_FILTER && status !== 'do_not_expand') {
         filter.status = status;
     }
 
@@ -208,6 +251,23 @@ async function handler(req, res) {
 
     const skip = (page - 1) * limit;
     const escapedQuery = q ? new RegExp(escapeRegex(q), 'i') : null;
+
+    if (status === 'do_not_expand') {
+        const blocked = await listBlockedArtists({ q, limit, skip });
+        return res.status(200).json({
+            items: blocked.items,
+            pagination: {
+                page,
+                limit,
+                total: blocked.total,
+                totalPages: blocked.total > 0 ? Math.ceil(blocked.total / limit) : 0,
+            },
+            filters: {
+                status,
+                q,
+            },
+        });
+    }
 
     const jobItems = await ArtistJob.find(filter)
         .select({
