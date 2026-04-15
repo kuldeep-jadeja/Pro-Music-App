@@ -26,7 +26,7 @@
 ### Worker Integration
 
 - [x] **SYNC-01**: Admin artist-expansion enqueue and retry flows reuse existing worker orchestration paths and do not bypass queue-based processing
-- [ ] **SYNC-02**: Existing background workers (`metadataWorker`, `artistCrawler`, `chartsWorker`, `ytMatchWorker`, and other active workers) continue processing without regression while admin expansion jobs are queued
+- [x] **SYNC-02**: Existing background workers (`metadataWorker`, `artistCrawler`, `chartsWorker`, `ytMatchWorker`, and other active workers) continue processing without regression while admin expansion jobs are queued
 - [x] **SYNC-03**: Artist expansion job status updates remain consistent with downstream worker outcomes (success/failure/retry) so dashboard state reflects real processing state
 
 ## v2 Requirements
@@ -59,7 +59,7 @@
 | VIS-02 | Phase 3 | Complete |
 | VIS-03 | Phase 3 | Complete |
 | SYNC-01 | Phase 2 | Complete |
-| SYNC-02 | Phase 4 | Pending |
+| SYNC-02 | Phase 4 | Complete |
 | SYNC-03 | Phase 3 | Complete |
 
 **Coverage:**
