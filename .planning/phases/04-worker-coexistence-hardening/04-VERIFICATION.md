@@ -63,7 +63,7 @@ human_verification:
 
 | Requirement | Source Plan | Description | Status | Evidence |
 | --- | --- | --- | --- | --- |
-| `SYNC-02` | `04-01-PLAN.md`, `04-02-PLAN.md` | Existing background workers continue processing without regression while admin expansion jobs are queued. | ? NEEDS HUMAN | Tooling/hardening implemented and checks pass, but real concurrent runtime behavior requires live overlap execution. |
+| `SYNC-02` | `04-01-PLAN.md`, `04-02-PLAN.md` | Existing background workers continue processing without regression while admin expansion jobs are queued. | ✓ SATISFIED | Tooling/hardening checks passed and human verification approved after live overlap + recovery checks. |
 
 **Requirement ID accounting:**  
 - Requirement IDs declared in plan frontmatter: `SYNC-02` (both plans).  
