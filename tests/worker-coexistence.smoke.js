@@ -177,10 +177,28 @@ function checkOverlapRegressions(reportPath) {
     }
 }
 
+function checkBackpressureGuardrails() {
+    const artistExpandWorker = readSource('workers/artistExpandWorker.js');
+    for (const token of [
+        'ARTIST_EXPAND_YTMATCH_MAX_DEPTH',
+        'ARTIST_EXPAND_BACKPRESSURE_SLEEP_MS',
+        'ARTIST_EXPAND_BACKPRESSURE_MAX_WAIT_MS',
+        'waitForYtmatchCapacity(',
+        'llen(YTMATCH_QUEUE_KEY)',
+        'ytmatch_backpressure_timeout',
+    ]) {
+        assertIncludes(
+            artistExpandWorker,
+            token,
+            `artistExpandWorker missing backpressure guardrail token: ${token}`
+        );
+    }
+}
+
 function main() {
     const args = parseArgs(process.argv.slice(2));
     if (!args.check) {
-        fail('Missing --check queue-isolation|user-flows|overlap-regressions');
+        fail('Missing --check queue-isolation|user-flows|overlap-regressions|backpressure-guardrails');
     }
     if (args.check === 'queue-isolation') {
         checkQueueIsolation();
@@ -195,6 +213,11 @@ function main() {
     if (args.check === 'overlap-regressions') {
         checkOverlapRegressions(args.report);
         console.log('overlap-regressions: PASS');
+        return;
+    }
+    if (args.check === 'backpressure-guardrails') {
+        checkBackpressureGuardrails();
+        console.log('backpressure-guardrails: PASS');
         return;
     }
     fail(`Unknown --check value: ${args.check}`);
