@@ -71,7 +71,21 @@ completed: 2026-04-15
 - Kept matrix probes tolerant to auth responses (non-5xx treated as reachable) so coexistence checks focus on flow availability and regressions.
 
 ## Deviations from Plan
-None - plan executed exactly as written.
+
+### Auto-fixed Issues
+
+**1. [Rule 3 - Blocking] Repaired malformed STATE.md structure after state tooling parse failure**
+- **Found during:** Post-task state update
+- **Issue:** `state advance-plan` could not parse `STATE.md` because the file contained duplicate frontmatter blocks.
+- **Fix:** Removed duplicate frontmatter block and manually updated current position/session continuity fields so state remained machine-readable.
+- **Files modified:** `.planning/STATE.md`
+- **Verification:** `STATE.md` now contains a single frontmatter block and updated Phase 4 Plan 2 position.
+- **Committed in:** `a7ecdb4`
+
+---
+
+**Total deviations:** 1 auto-fixed (1 blocking)
+**Impact on plan:** No scope creep; fix was required to complete mandatory state/roadmap update outputs.
 
 ## Issues Encountered
 None.
