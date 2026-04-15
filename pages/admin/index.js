@@ -32,6 +32,8 @@ export default function AdminDashboard({ adminEmail }) {
     const [retryInFlight, setRetryInFlight] = useState({});
     const [bulkInFlight, setBulkInFlight] = useState(false);
     const [bulkResult, setBulkResult] = useState(null);
+    const [policyInFlight, setPolicyInFlight] = useState(false);
+    const [policyResult, setPolicyResult] = useState(null);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -60,6 +62,8 @@ export default function AdminDashboard({ adminEmail }) {
                 ? data.items.map((item) => ({
                     ...item,
                     artistName: normalizeArtistName(item?.artistName),
+                    queueSpotifyId: item?.queueSpotifyId || item?.artistSpotifyId || null,
+                    isBlocked: Boolean(item?.isBlocked),
                 }))
                 : [];
             setJobs(normalizedItems);
@@ -144,7 +148,9 @@ export default function AdminDashboard({ adminEmail }) {
     const visibleRows = useMemo(() => jobs.map((job) => ({
         jobId: String(job._id),
         artistSpotifyId: job.artistSpotifyId || null,
+        queueSpotifyId: job.queueSpotifyId || job.artistSpotifyId || null,
         artistName: job.artistName || null,
+        isBlocked: Boolean(job.isBlocked),
     })), [jobs]);
     const allVisibleSelected = useMemo(() => (
         visibleRows.length > 0 && visibleRows.every((row) => Boolean(selected[row.jobId]))
@@ -153,6 +159,10 @@ export default function AdminDashboard({ adminEmail }) {
         visibleRows.some((row) => Boolean(selected[row.jobId]))
     ), [visibleRows, selected]);
     const selectedCount = useMemo(() => Object.keys(selected).length, [selected]);
+    const selectedQueueableCount = useMemo(
+        () => Object.values(selected).filter((item) => !item?.isBlocked).length,
+        [selected]
+    );
 
     const toggleRowSelection = useCallback((job) => {
         const jobId = String(job._id);
@@ -166,7 +176,9 @@ export default function AdminDashboard({ adminEmail }) {
                 ...prev,
                 [jobId]: {
                     artistSpotifyId: job.artistSpotifyId || null,
+                    queueSpotifyId: job.queueSpotifyId || job.artistSpotifyId || null,
                     artistName: job.artistName || null,
+                    isBlocked: Boolean(job.isBlocked),
                 },
             };
         });
@@ -186,7 +198,9 @@ export default function AdminDashboard({ adminEmail }) {
             for (const row of visibleRows) {
                 next[row.jobId] = {
                     artistSpotifyId: row.artistSpotifyId,
+                    queueSpotifyId: row.queueSpotifyId,
                     artistName: row.artistName,
+                    isBlocked: row.isBlocked,
                 };
             }
             return next;
@@ -194,7 +208,7 @@ export default function AdminDashboard({ adminEmail }) {
     }, [allVisibleSelected, visibleRows]);
 
     const handleBulkQueue = useCallback(async () => {
-        const selectedArtists = Object.values(selected);
+        const selectedArtists = Object.values(selected).filter((artist) => !artist?.isBlocked);
         if (selectedArtists.length === 0 || bulkInFlight) return;
 
         setBulkInFlight(true);
@@ -207,7 +221,7 @@ export default function AdminDashboard({ adminEmail }) {
                 },
                 body: JSON.stringify({
                     artists: selectedArtists.map((artist) => ({
-                        spotifyId: artist.artistSpotifyId,
+                        spotifyId: artist.queueSpotifyId || artist.artistSpotifyId,
                         name: artist.artistName,
                     })),
                 }),
@@ -222,22 +236,8 @@ export default function AdminDashboard({ adminEmail }) {
                 results,
             });
 
-            const queuedSpotifyIds = new Set(
-                results
-                    .filter((item) => item?.status === 'queued' && item?.artistSpotifyId)
-                    .map((item) => item.artistSpotifyId)
-            );
-
-            if (queuedSpotifyIds.size > 0) {
-                setSelected((prev) => {
-                    const next = { ...prev };
-                    for (const [jobId, artist] of Object.entries(prev)) {
-                        if (queuedSpotifyIds.has(artist?.artistSpotifyId)) {
-                            delete next[jobId];
-                        }
-                    }
-                    return next;
-                });
+            if (results.some((item) => item?.status === 'queued')) {
+                setSelected({});
             }
 
             if (!response.ok) {
@@ -254,6 +254,58 @@ export default function AdminDashboard({ adminEmail }) {
             fetchJobs({ silent: true });
         }
     }, [selected, bulkInFlight, fetchJobs]);
+
+    const handleBulkPolicy = useCallback(async (action) => {
+        const selectedArtists = Object.values(selected);
+        if (selectedArtists.length === 0 || policyInFlight) return;
+
+        setPolicyInFlight(true);
+        try {
+            const response = await fetch('/api/admin/artist-blocklist', {
+                method: action === 'block' ? 'POST' : 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    artists: selectedArtists.map((artist) => ({
+                        spotifyId: artist.artistSpotifyId || artist.queueSpotifyId || null,
+                        name: artist.artistName || null,
+                    })),
+                }),
+            });
+
+            const data = await response.json().catch(() => null);
+            const summary = data?.summary || {
+                total: 0,
+                blocked: 0,
+                unblocked: 0,
+                skipped: 0,
+                failed: 0,
+            };
+            const results = Array.isArray(data?.results) ? data.results : [];
+
+            setPolicyResult({
+                action,
+                summary,
+                results,
+                error: response.ok ? null : 'Request failed. Please retry.',
+            });
+
+            if (response.ok) {
+                setSelected({});
+            }
+        } catch (_) {
+            setPolicyResult({
+                action,
+                summary: { total: 0, blocked: 0, unblocked: 0, skipped: 0, failed: 0 },
+                results: [],
+                error: 'Request failed. Please retry.',
+            });
+        } finally {
+            setPolicyInFlight(false);
+            fetchJobs({ silent: true });
+        }
+    }, [selected, policyInFlight, fetchJobs]);
 
     return (
         <>
@@ -275,14 +327,32 @@ export default function AdminDashboard({ adminEmail }) {
                     <section className={styles.jobsSection}>
                         <div className={styles.bulkControls}>
                             <div className={styles.bulkSelectionMeta}>{selectedCount} selected</div>
-                            <button
-                                type="button"
-                                className={styles.bulkQueueButton}
-                                disabled={selectedCount === 0 || bulkInFlight}
-                                onClick={handleBulkQueue}
-                            >
-                                {bulkInFlight ? 'Queueing…' : 'Queue Selected Artists'}
-                            </button>
+                            <div className={styles.bulkActionGroup}>
+                                <button
+                                    type="button"
+                                    className={styles.bulkQueueButton}
+                                    disabled={selectedQueueableCount === 0 || bulkInFlight}
+                                    onClick={handleBulkQueue}
+                                >
+                                    {bulkInFlight ? 'Queueing…' : 'Queue Selected Artists'}
+                                </button>
+                                <button
+                                    type="button"
+                                    className={styles.blockButton}
+                                    disabled={selectedCount === 0 || policyInFlight}
+                                    onClick={() => handleBulkPolicy('block')}
+                                >
+                                    {policyInFlight ? 'Saving…' : 'Mark Do Not Expand'}
+                                </button>
+                                <button
+                                    type="button"
+                                    className={styles.unblockButton}
+                                    disabled={selectedCount === 0 || policyInFlight}
+                                    onClick={() => handleBulkPolicy('unblock')}
+                                >
+                                    {policyInFlight ? 'Saving…' : 'Remove Do Not Expand'}
+                                </button>
+                            </div>
                         </div>
 
                         {bulkResult ? (
@@ -297,6 +367,33 @@ export default function AdminDashboard({ adminEmail }) {
                                     <ul className={styles.bulkResultList}>
                                         {bulkResult.results.map((item, index) => (
                                             <li key={`${item.artistSpotifyId || item.artistName || 'artist'}-${index}`}>
+                                                <span className={styles.bulkResultArtist}>{item.artistName || item.artistSpotifyId || 'Unknown artist'}</span>
+                                                <span className={styles.bulkResultState}>{item.status || 'unknown'}</span>
+                                                <span className={styles.bulkResultReason}>{item.reason || 'unknown_reason'}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : null}
+                            </div>
+                        ) : null}
+
+                        {policyResult ? (
+                            <div className={styles.bulkResultPanel}>
+                                <div className={styles.bulkResultSummary}>
+                                    <strong>{policyResult.action === 'block' ? 'blocklist' : 'unblock'}</strong>
+                                    {' '}· total {policyResult.summary?.total || 0}
+                                    {' '}· blocked {policyResult.summary?.blocked || 0}
+                                    {' '}· unblocked {policyResult.summary?.unblocked || 0}
+                                    {' '}· skipped {policyResult.summary?.skipped || 0}
+                                    {' '}· failed {policyResult.summary?.failed || 0}
+                                </div>
+                                {policyResult.error ? (
+                                    <div className={styles.bulkResultError}>{policyResult.error}</div>
+                                ) : null}
+                                {Array.isArray(policyResult.results) && policyResult.results.length > 0 ? (
+                                    <ul className={styles.bulkResultList}>
+                                        {policyResult.results.map((item, index) => (
+                                            <li key={`${item.artistSpotifyId || item.artistName || 'artist'}-policy-${index}`}>
                                                 <span className={styles.bulkResultArtist}>{item.artistName || item.artistSpotifyId || 'Unknown artist'}</span>
                                                 <span className={styles.bulkResultState}>{item.status || 'unknown'}</span>
                                                 <span className={styles.bulkResultReason}>{item.reason || 'unknown_reason'}</span>
@@ -388,19 +485,21 @@ export default function AdminDashboard({ adminEmail }) {
                                                         <input
                                                             type="checkbox"
                                                             checked={Boolean(selected[String(job._id)])}
-                                                            aria-label={`Select ${job.artistName || 'unknown artist'} (${job.artistSpotifyId || 'unknown Spotify ID'})`}
+                                                            aria-label={`Select ${job.artistName || 'unknown artist'} (${job.artistSpotifyId || job.queueSpotifyId || 'unknown Spotify ID'})`}
                                                             onChange={() => toggleRowSelection(job)}
                                                         />
                                                         <span className={styles.srOnly}>Select row</span>
                                                     </label>
                                                 </td>
-                                                <td>{job.status || '—'}</td>
+                                                <td>{job.isBlocked ? 'do_not_expand' : (job.status === 'not_queued' ? 'ready_to_queue' : (job.status || '—'))}</td>
                                                 <td>{job.artistName || 'Unknown artist'}</td>
-                                                <td>{job.artistSpotifyId || '—'}</td>
+                                                <td>{job.artistSpotifyId || job.queueSpotifyId || '—'}</td>
                                                 <td>{job.updatedAt ? new Date(job.updatedAt).toLocaleString() : '—'}</td>
-                                                <td>{job.error || '—'}</td>
+                                                <td>{job.error || (job.isBlocked ? 'blocked by admin' : '—')}</td>
                                                 <td>
-                                                    {job.status === 'failed' ? (
+                                                    {job.isBlocked ? (
+                                                        <span className={styles.blockedBadge}>Do not expand</span>
+                                                    ) : job.status === 'failed' ? (
                                                         <button
                                                             className={styles.retryButton}
                                                             type="button"

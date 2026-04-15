@@ -1,6 +1,7 @@
 import { requireAdmin } from '@/lib/requireAdmin';
 import { connectDB } from '@/lib/mongodb';
 import ArtistJob from '@/models/ArtistJob';
+import ArtistExpandBlock from '@/models/ArtistExpandBlock';
 import Track from '@/models/Track';
 import {
     DEFAULT_LIMIT,
@@ -19,6 +20,70 @@ function asSingleValue(value, fallback = '') {
 
 function escapeRegex(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeArtistKey(value) {
+    const normalized = normalizeArtistName(value);
+    return normalized ? normalized.toLowerCase() : null;
+}
+
+function compareByUpdatedThenIdDesc(a, b) {
+    const aTime = a?.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+    const bTime = b?.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+    if (aTime !== bTime) return bTime - aTime;
+    return String(b?._id || '').localeCompare(String(a?._id || ''));
+}
+
+async function listArtistCandidates(limit) {
+    const docs = await Track.aggregate([
+        {
+            $match: {
+                spotifyId: { $exists: true, $type: 'string', $ne: '' },
+                artists: { $exists: true, $type: 'array', $ne: [] },
+            },
+        },
+        {
+            $project: {
+                seedSpotifyId: '$spotifyId',
+                updatedAt: '$updatedAt',
+                primaryArtistRaw: { $arrayElemAt: ['$artists', 0] },
+            },
+        },
+        {
+            $addFields: {
+                artistName: { $trim: { input: { $ifNull: ['$primaryArtistRaw', ''] } } },
+            },
+        },
+        { $match: { artistName: { $ne: '' } } },
+        { $sort: { updatedAt: -1, _id: -1 } },
+        {
+            $group: {
+                _id: { $toLower: '$artistName' },
+                artistName: { $first: '$artistName' },
+                queueSpotifyId: { $first: '$seedSpotifyId' },
+                updatedAt: { $first: '$updatedAt' },
+                trackCount: { $sum: 1 },
+            },
+        },
+        { $sort: { updatedAt: -1, artistName: 1 } },
+        { $limit: Math.max(1, limit) },
+    ]);
+
+    return docs.map((doc) => ({
+        _id: `candidate:${doc._id}`,
+        artistName: doc.artistName || null,
+        artistSpotifyId: null,
+        queueSpotifyId: doc.queueSpotifyId || null,
+        status: 'not_queued',
+        error: null,
+        updatedAt: doc.updatedAt || null,
+        queuedAt: null,
+        startedAt: null,
+        completedAt: null,
+        retriedAt: null,
+        isCandidate: true,
+        trackCount: doc.trackCount || 0,
+    }));
 }
 
 async function resolveArtistNameFromTrackCollection(artistSpotifyId) {
@@ -51,6 +116,58 @@ async function backfillMissingArtistNames(items) {
                 { $set: { artistName: resolvedName } }
             );
         } catch (_) { /* non-blocking name backfill */ }
+    }
+}
+
+async function annotateBlockedState(items) {
+    if (!Array.isArray(items) || items.length === 0) return;
+
+    const normalizedNames = [...new Set(
+        items
+            .map((item) => normalizeArtistKey(item.artistName))
+            .filter(Boolean)
+    )];
+    const spotifyIds = [...new Set(
+        items
+            .map((item) => (typeof item.artistSpotifyId === 'string' ? item.artistSpotifyId.trim() : ''))
+            .filter(Boolean)
+    )];
+
+    const blockFilter = [];
+    if (normalizedNames.length > 0) {
+        blockFilter.push({ normalizedArtistName: { $in: normalizedNames } });
+    }
+    if (spotifyIds.length > 0) {
+        blockFilter.push({ artistSpotifyId: { $in: spotifyIds } });
+    }
+    if (blockFilter.length === 0) {
+        for (const item of items) item.isBlocked = false;
+        return;
+    }
+
+    const blockedItems = await ArtistExpandBlock.find({ $or: blockFilter })
+        .select({ normalizedArtistName: 1, artistSpotifyId: 1, updatedAt: 1 })
+        .lean();
+
+    const blockedNameMap = new Map(
+        blockedItems
+            .filter((item) => item.normalizedArtistName)
+            .map((item) => [item.normalizedArtistName, item])
+    );
+    const blockedSpotifyMap = new Map(
+        blockedItems
+            .filter((item) => item.artistSpotifyId)
+            .map((item) => [item.artistSpotifyId, item])
+    );
+
+    for (const item of items) {
+        const byName = blockedNameMap.get(normalizeArtistKey(item.artistName));
+        const bySpotifyId = item.artistSpotifyId
+            ? blockedSpotifyMap.get(String(item.artistSpotifyId).trim())
+            : null;
+        const blockDoc = byName || bySpotifyId || null;
+        item.isBlocked = Boolean(blockDoc);
+        item.blockedAt = blockDoc?.updatedAt || null;
     }
 }
 
@@ -89,11 +206,10 @@ async function handler(req, res) {
         ];
     }
 
-    const total = await ArtistJob.countDocuments(filter);
-    const totalPages = total > 0 ? Math.ceil(total / limit) : 0;
     const skip = (page - 1) * limit;
+    const escapedQuery = q ? new RegExp(escapeRegex(q), 'i') : null;
 
-    const items = await ArtistJob.find(filter)
+    const jobItems = await ArtistJob.find(filter)
         .select({
             artistName: 1,
             artistSpotifyId: 1,
@@ -110,15 +226,56 @@ async function handler(req, res) {
         .limit(limit)
         .lean();
 
-    await backfillMissingArtistNames(items);
+    await backfillMissingArtistNames(jobItems);
+
+    const normalizedJobItems = jobItems.map((item) => ({
+        ...item,
+        queueSpotifyId: item.artistSpotifyId || null,
+        isCandidate: false,
+    }));
+
+    let items = [...normalizedJobItems];
+    if (status === DEFAULT_STATUS_FILTER && page === 1) {
+        const candidatePool = await listArtistCandidates(limit * 4);
+        const existingArtistNames = new Set(
+            normalizedJobItems
+                .map((item) => normalizeArtistName(item.artistName))
+                .filter(Boolean)
+                .map((name) => name.toLowerCase())
+        );
+
+        const candidateItems = [];
+        for (const candidate of candidatePool) {
+            const normalizedName = normalizeArtistName(candidate.artistName);
+            if (!normalizedName) continue;
+            if (existingArtistNames.has(normalizedName.toLowerCase())) continue;
+
+            if (
+                escapedQuery &&
+                !escapedQuery.test(candidate.artistName || '') &&
+                !escapedQuery.test(candidate.queueSpotifyId || '')
+            ) {
+                continue;
+            }
+
+            candidateItems.push(candidate);
+            if ((normalizedJobItems.length + candidateItems.length) >= limit) break;
+        }
+
+        items = [...normalizedJobItems, ...candidateItems]
+            .sort(compareByUpdatedThenIdDesc)
+            .slice(0, limit);
+    }
+
+    await annotateBlockedState(items);
 
     return res.status(200).json({
         items,
         pagination: {
             page,
             limit,
-            total,
-            totalPages,
+            total: items.length,
+            totalPages: items.length > 0 ? 1 : 0,
         },
         filters: {
             status,

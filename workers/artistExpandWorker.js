@@ -121,13 +121,24 @@ const TrackSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
+const ArtistExpandBlockSchema = new mongoose.Schema(
+    {
+        artistName: { type: String, required: true },
+        normalizedArtistName: { type: String, required: true, unique: true, index: true },
+        artistSpotifyId: { type: String, default: null, index: true },
+    },
+    { timestamps: true }
+);
+
 let ArtistJob;
 let Track;
+let ArtistExpandBlock;
 
 // ─── Model initialiser ────────────────────────────────────────────────────────
 function initModels() {
     ArtistJob = mongoose.models.ArtistJob || mongoose.model('ArtistJob', ArtistJobSchema);
     Track = mongoose.models.Track || mongoose.model('Track', TrackSchema);
+    ArtistExpandBlock = mongoose.models.ArtistExpandBlock || mongoose.model('ArtistExpandBlock', ArtistExpandBlockSchema);
 }
 
 // ─── MongoDB connection ───────────────────────────────────────────────────────
@@ -167,6 +178,29 @@ async function enqueueMatchJob(redis, job) {
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+function normalizeArtistName(value) {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeArtistKey(value) {
+    const normalized = normalizeArtistName(value);
+    return normalized ? normalized.toLowerCase() : null;
+}
+
+async function findArtistBlock(artistName, artistSpotifyId) {
+    const normalizedArtistName = normalizeArtistKey(artistName);
+    const filter = [];
+    if (artistSpotifyId) filter.push({ artistSpotifyId });
+    if (normalizedArtistName) filter.push({ normalizedArtistName });
+    if (filter.length === 0) return null;
+
+    return ArtistExpandBlock.findOne({ $or: filter })
+        .select({ _id: 1 })
+        .lean();
+}
 
 async function waitForYtmatchCapacity(redis, context = {}) {
     const startedAt = Date.now();
@@ -432,6 +466,22 @@ async function upsertTrack(track) {
 async function processJob(job, getData, redis) {
     const { artistSpotifyId, artistName } = job;
 
+    const blockedBeforeClaim = await findArtistBlock(artistName, artistSpotifyId);
+    if (blockedBeforeClaim) {
+        await ArtistJob.findOneAndUpdate(
+            { artistSpotifyId, status: 'queued' },
+            {
+                $set: {
+                    status: 'failed',
+                    error: 'blocked_do_not_expand',
+                    completedAt: new Date(),
+                },
+            }
+        );
+        logWarn(`Blocked artist skipped: ${artistName || artistSpotifyId}`);
+        return;
+    }
+
     // Mark as running (atomic — only if still queued to avoid double-processing)
     const claimed = await ArtistJob.findOneAndUpdate(
         { artistSpotifyId, status: 'queued' },
@@ -440,6 +490,22 @@ async function processJob(job, getData, redis) {
     );
     if (!claimed) {
         logWarn(`Job for ${artistSpotifyId} not in queued state — skipping`);
+        return;
+    }
+
+    const blockedAfterClaim = await findArtistBlock(claimed.artistName || artistName, artistSpotifyId);
+    if (blockedAfterClaim) {
+        await ArtistJob.findOneAndUpdate(
+            { _id: claimed._id },
+            {
+                $set: {
+                    status: 'failed',
+                    error: 'blocked_do_not_expand',
+                    completedAt: new Date(),
+                },
+            }
+        );
+        logWarn(`Blocked artist stopped after claim: ${claimed.artistName || artistName || artistSpotifyId}`);
         return;
     }
 

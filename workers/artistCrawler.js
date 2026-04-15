@@ -74,10 +74,21 @@ const TrackSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
+const ArtistExpandBlockSchema = new mongoose.Schema(
+    {
+        artistName: { type: String, required: true },
+        normalizedArtistName: { type: String, required: true, unique: true, index: true },
+        artistSpotifyId: { type: String, default: null, index: true },
+    },
+    { timestamps: true }
+);
+
 let Track;
+let ArtistExpandBlock;
 
 function initModels() {
     Track = mongoose.models.Track || mongoose.model('Track', TrackSchema);
+    ArtistExpandBlock = mongoose.models.ArtistExpandBlock || mongoose.model('ArtistExpandBlock', ArtistExpandBlockSchema);
 }
 
 // ─── MongoDB connection ───────────────────────────────────────────────────────
@@ -101,6 +112,26 @@ function generateFingerprint(name, artists) {
         .replace(/[^\w\s]/g, '')
         .trim();
     return primaryArtist ? `${result} ${primaryArtist}`.trim() : result;
+}
+
+function normalizeArtistName(value) {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeArtistKey(value) {
+    const normalized = normalizeArtistName(value);
+    return normalized ? normalized.toLowerCase() : null;
+}
+
+async function isArtistNameBlocked(artistName) {
+    const normalizedArtistName = normalizeArtistKey(artistName);
+    if (!normalizedArtistName) return false;
+    const blocked = await ArtistExpandBlock.findOne({ normalizedArtistName })
+        .select({ _id: 1 })
+        .lean();
+    return Boolean(blocked);
 }
 
 // ─── Redis enqueue helper ─────────────────────────────────────────────────────
@@ -492,6 +523,11 @@ async function run() {
         if (trackCount >= MAX_TRACKS_PER_RUN) {
             console.log('[artistCrawler] MAX_TRACKS_PER_RUN reached — stopping early');
             break;
+        }
+
+        if (await isArtistNameBlocked(artistName)) {
+            console.log(`[artistCrawler] Skipping blocked artist: "${artistName}"`);
+            continue;
         }
 
         const seedTrack = artistToSeedTrack[artistName];

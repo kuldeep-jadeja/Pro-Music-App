@@ -1,8 +1,14 @@
 import { requireAdmin } from '@/lib/requireAdmin';
 import { connectDB } from '@/lib/mongodb';
 import ArtistJob from '@/models/ArtistJob';
+import ArtistExpandBlock from '@/models/ArtistExpandBlock';
 import { enqueueArtistExpand } from '@/lib/artistExpandQueue';
-import { resolveArtistTarget } from '@/lib/admin/resolveArtistTarget';
+import { normalizeArtistName, resolveArtistTarget } from '@/lib/admin/resolveArtistTarget';
+
+function normalizeArtistKey(value) {
+    const normalized = normalizeArtistName(value);
+    return normalized ? normalized.toLowerCase() : null;
+}
 
 /**
  * POST /api/admin/enqueue-artists
@@ -24,6 +30,7 @@ import { resolveArtistTarget } from '@/lib/admin/resolveArtistTarget';
  * Reason codes:
  *   queued           — successfully enqueued (new or re-enqueue from done/failed)
  *   already_active   — skipped because a queued or running job already exists
+ *   do_not_expand    — skipped because the artist is in the admin blocklist
  *   missing_artist_id — failed because no spotifyId was provided
  *   invalid_artist_spotify_id — failed because spotifyId could not resolve to an artist
  *   redis_unavailable — failed because Redis enqueue returned false (Redis down)
@@ -80,6 +87,30 @@ async function handler(req, res) {
 
         const artistSpotifyId = resolvedTarget.artistSpotifyId;
         const artistName = resolvedTarget.artistName || null;
+        const normalizedArtistName = normalizeArtistKey(artistName);
+
+        // Blocklist guard — artists marked as do_not_expand must not be queued.
+        const blockFilter = [];
+        if (artistSpotifyId) {
+            blockFilter.push({ artistSpotifyId });
+        }
+        if (normalizedArtistName) {
+            blockFilter.push({ normalizedArtistName });
+        }
+        if (blockFilter.length > 0) {
+            const blocked = await ArtistExpandBlock.findOne({ $or: blockFilter })
+                .select({ _id: 1 })
+                .lean();
+            if (blocked) {
+                results.push({
+                    artistSpotifyId,
+                    artistName,
+                    status: 'skipped',
+                    reason: 'do_not_expand',
+                });
+                continue;
+            }
+        }
 
         // Step 2 — Within-payload deduplication
         if (seen.has(artistSpotifyId)) {

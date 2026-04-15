@@ -70,6 +70,13 @@
     color: $text-secondary;
 }
 
+.bulkActionGroup {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
 .bulkQueueButton {
     min-height: 44px;
     padding: 10px 14px;
@@ -85,6 +92,33 @@
         opacity: 0.45;
         cursor: not-allowed;
     }
+}
+
+.blockButton,
+.unblockButton {
+    min-height: 44px;
+    padding: 10px 14px;
+    border-radius: $radius-md;
+    font-size: 0.875rem;
+    font-weight: 700;
+    cursor: pointer;
+
+    &:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
+}
+
+.blockButton {
+    border: 1px solid rgba($danger, 0.55);
+    background: rgba($danger, 0.16);
+    color: $text-primary;
+}
+
+.unblockButton {
+    border: 1px solid rgba($success, 0.45);
+    background: rgba($success, 0.12);
+    color: $text-primary;
 }
 
 .bulkResultPanel {
@@ -263,6 +297,18 @@
 
 .actionPlaceholder {
     color: $text-muted;
+}
+
+.blockedBadge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: $radius-sm;
+    border: 1px solid rgba($danger, 0.5);
+    background: rgba($danger, 0.15);
+    color: $danger;
+    font-size: 0.75rem;
+    font-weight: 700;
 }
 
 .emptyState,
