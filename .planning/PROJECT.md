@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Demus is a full-stack music streaming PWA that imports public Spotify playlists, matches tracks to YouTube, and plays them through a persistent global player. It includes worker-driven background enrichment and expansion flows for library data. The current focus is adding an admin-only control surface for artist expansion operations.
+Demus is a full-stack music streaming PWA that imports public Spotify playlists, matches tracks to YouTube, and plays them through a persistent global player. It includes worker-driven background enrichment and admin-operated artist expansion controls that are now shipped in v1.0.
 
 ## Core Value
 
@@ -16,12 +16,17 @@ Turn Spotify playlist discovery into reliable, always-available playback with fa
 - ✓ Match tracks to YouTube IDs via queued worker processing — existing
 - ✓ Play tracks through a global, route-persistent YouTube player — existing
 - ✓ Show playlist and track library UI with now-playing and queue interactions — existing
+- ✓ Admin-only page shows artist expansion jobs with filters and operational state visibility — v1.0
+- ✓ Admin can multi-select artists and bulk queue expansion jobs — v1.0
+- ✓ Admin access is restricted to a single configured email — v1.0
+- ✓ Expansion queue activity coexists with existing worker flows using matrix/report/smoke verification tooling — v1.0
 
 ### Active
 
-- [ ] Admin-only page shows all artist expansion jobs with filters (queued/running/done/failed)
-- [ ] Admin can multi-select artists and bulk queue expansion jobs — queue APIs built in Phase 2 (enqueue-artists, retry-jobs, artistExpandWorker)
-- [x] Admin access is restricted to a single configured email — Validated in Phase 1: Admin Access Control
+- [ ] OPS-01: Save and reuse dashboard filter presets
+- [ ] OPS-02: Queue health cards (depth, lag, worker heartbeat)
+- [ ] OPS-03: Bulk enqueue impact preview
+- [ ] Reduce cross-phase drift by consuming shared admin dashboard contract constants in API and UI
 
 ### Out of Scope
 
@@ -30,7 +35,7 @@ Turn Spotify playlist discovery into reliable, always-available playback with fa
 
 ## Context
 
-This is a brownfield Next.js Pages Router app with existing workers for YouTube matching, metadata enrichment, and artist crawling. Playback architecture is stable and centralized in `PlayerContext`, while app-level browsing state is in `AppContext`. The new admin page should integrate with existing artist expansion workers without disrupting current playback or import flows.
+This is a brownfield Next.js Pages Router app with workers for YouTube matching, metadata enrichment, artist crawling, and artist expansion. Playback architecture remains stable (`PlayerContext`), app-level browsing state remains in `AppContext`, and v1.0 shipped admin expansion controls plus coexistence validation tooling.
 
 ## Constraints
 
@@ -43,9 +48,21 @@ This is a brownfield Next.js Pages Router app with existing workers for YouTube 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
 | Admin page access uses one configured email | Fastest secure gate for current operator workflow | Implemented — middleware + API guards in Phase 1 |
-| Artist selection uses multi-select with bulk queue action | Efficiently manage many artists at once | — Pending |
-| Page includes all states with filters | Gives full operational visibility, not just active jobs | — Pending |
-| Selection queues jobs only (no forced immediate run) | Keeps worker scheduling behavior consistent and predictable | — Pending |
+| Artist selection uses multi-select with bulk queue action | Efficiently manage many artists at once | Implemented — dashboard bulk enqueue in Phase 3 |
+| Page includes all states with filters | Gives full operational visibility, not just active jobs | Implemented — jobs API + dashboard filters in Phase 3 |
+| Selection queues jobs only (no forced immediate run) | Keeps worker scheduling behavior consistent and predictable | Implemented — queue-safe orchestration preserved in Phases 2-4 |
+
+## Current State (v1.0 Shipped)
+
+- Milestone v1.0 archived with 4 phases complete (11 plans, 17 tasks).
+- All v1 requirements are satisfied and traced.
+- Cross-phase integration has no blockers; remaining items are tracked as tech debt.
+
+## Next Milestone Goals
+
+- Define vNext requirements and roadmap with `/gsd-new-milestone`.
+- Address operational enhancements (OPS-01..OPS-03).
+- Improve Nyquist compliance and reduce contract drift risks identified in the v1.0 audit.
 
 ---
-*Last updated: 2026-04-14 after Phase 2: Queue-Safe Job Actions complete*
+*Last updated: 2026-04-15 after v1.0 milestone archive*
