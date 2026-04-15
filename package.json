@@ -19,7 +19,9 @@
         "repair:artists": "node scripts/repairEmptyArtists.js",
         "repair:albums": "node scripts/repairAlbumImages.js",
         "repair:all": "node scripts/repairMissingFields.js",
-        "db:status": "node scripts/dbStatus.js"
+        "db:status": "node scripts/dbStatus.js",
+        "enrich:genres": "node scripts/enrichGenres.js",
+        "enrich:genres:dry": "node scripts/enrichGenres.js --dry-run"
     },
     "dependencies": {
         "@ducanh2912/next-pwa": "^10.2.9",
