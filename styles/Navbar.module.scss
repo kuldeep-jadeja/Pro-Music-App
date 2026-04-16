@@ -19,8 +19,9 @@
 
     @media (max-width: $breakpoint-mobile) {
         left: 0;
-        padding-left: 16px;
-        padding-right: 16px;
+        padding-left: 12px;
+        padding-right: 12px;
+        gap: 0; // controlled individually on mobile
     }
 }
 
@@ -51,8 +52,9 @@
     flex: 1;
     max-width: 480px;
 
+    // Hidden on mobile — replaced by mobileSearchBtn
     @media (max-width: $breakpoint-mobile) {
-        max-width: none;
+        display: none;
     }
 }
 
@@ -110,8 +112,170 @@
 .controls {
     display: flex;
     align-items: center;
-gap: 7px;
+    gap: 7px;
     flex-shrink: 0;
+
+    // Hidden on mobile — replaced by mobileControls
+    @media (max-width: $breakpoint-mobile) {
+        display: none;
+    }
+}
+
+// ── Mobile brand (centered) ─────────────────────────────────────
+.mobileBrand {
+    display: none;
+
+    @media (max-width: $breakpoint-mobile) {
+        display: block;
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        font-family: $font-display;
+        font-size: 1.0625rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: $text-primary;
+        pointer-events: none;
+        white-space: nowrap;
+    }
+}
+
+// ── Mobile compact controls ─────────────────────────────────────
+.mobileControls {
+    display: none;
+
+    @media (max-width: $breakpoint-mobile) {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+    }
+}
+
+.mobileSearchBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: $radius-lg;
+    color: $text-secondary;
+    transition:
+        color $transition-fast,
+        background $transition-fast;
+
+    &:hover {
+        color: $text-primary;
+        background: rgba(white, 0.06);
+    }
+}
+
+.avatarWrap {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.avatarBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: $radius-full;
+    background: linear-gradient(135deg, rgba($accent, 0.85), rgba($accent-teal, 0.65));
+    color: white;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    font-family: $font-display;
+    letter-spacing: 0;
+    flex-shrink: 0;
+    transition:
+        opacity $transition-fast,
+        box-shadow $transition-fast;
+
+    &:hover {
+        opacity: 0.88;
+        box-shadow: 0 0 0 3px rgba($accent, 0.25);
+    }
+
+    &[aria-expanded="true"] {
+        box-shadow: 0 0 0 3px rgba($accent, 0.35);
+    }
+}
+
+.avatarMenu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 200px;
+    @include glass-heavy;
+    border-radius: $radius-xl;
+    overflow: hidden;
+    z-index: 200;
+    // Subtle drop shadow
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.45),
+        0 2px 8px rgba(0, 0, 0, 0.3),
+        0 0 0 1px rgba(white, 0.06);
+    // Slide-in from above
+    animation: menuSlideIn 150ms $ease-out both;
+}
+
+@keyframes menuSlideIn {
+    from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+.avatarMenuEmail {
+    padding: 12px 14px 10px;
+    font-size: 0.75rem;
+    color: $text-muted;
+    word-break: break-all;
+    line-height: 1.4;
+}
+
+.avatarMenuDivider {
+    height: 1px;
+    background: rgba(white, 0.06);
+    margin: 0;
+}
+
+.avatarMenuLogout {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 14px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: $text-secondary;
+    text-align: left;
+    transition:
+        color $transition-fast,
+        background $transition-fast;
+
+    &:hover {
+        color: hsl(350, 80%, 65%);
+        background: rgba(hsl(350, 80%, 65%), 0.08);
+    }
+}
+
+.mobileLoginBtn {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: $accent;
+    padding: 6px 12px;
+    border: 1px solid rgba($accent, 0.35);
+    border-radius: $radius-full;
+    white-space: nowrap;
+    transition:
+        background $transition-fast,
+        border-color $transition-fast;
+
+    &:hover {
+        background: rgba($accent, 0.08);
+        border-color: rgba($accent, 0.55);
+    }
 }
 
 .separator {

@@ -1,5 +1,11 @@
 @use "variables" as *;
 
+// ── Playing-bars animation ────────────────────────────────────
+@keyframes playBar {
+    0%, 100% { transform: scaleY(0.35); }
+    50%       { transform: scaleY(1); }
+}
+
 // ── Panel shell ───────────────────────────────────────────────
 .panel {
     position: fixed;
@@ -16,23 +22,40 @@
     transform: translateX(calc(100% + 16px));
     transition: transform 300ms $ease-out;
 
+    // Top accent strip
     &::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: linear-gradient(
+            90deg,
+            transparent 0%,
+            rgba($accent, 0.6) 40%,
+            rgba($accent-teal, 0.5) 70%,
+            transparent 100%
+        );
+        z-index: 2;
+        border-radius: $radius-2xl $radius-2xl 0 0;
+    }
+
+    // Ambient inner glow
+    &::after {
         content: "";
         position: absolute;
         inset: 0;
         border-radius: $radius-2xl;
-        background: linear-gradient(
-            to bottom,
-            rgba($accent, 0.02),
-            transparent
+        background: radial-gradient(
+            ellipse 80% 40% at 50% 0%,
+            rgba($accent, 0.04),
+            transparent 70%
         );
         pointer-events: none;
         z-index: 0;
     }
 
-    // Toggled by panelOpen prop at every viewport width.
-    // The Navbar toggle controls this at ≥ breakpoint-panel;
-    // the in-panel close button controls it at smaller sizes.
     &.panelOpen {
         transform: translateX(0);
     }
@@ -42,8 +65,7 @@
     }
 }
 
-.panelEmpty {
-}
+.panelEmpty {}
 
 // ── Header ────────────────────────────────────────────────────
 .panelHeader {
@@ -52,7 +74,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 16px 12px;
+    padding: 14px 16px 12px;
     flex-shrink: 0;
     border-bottom: 1px solid rgba(white, 0.05);
 }
@@ -60,9 +82,9 @@
 .panelTitle {
     font-size: 0.625rem;
     font-weight: 700;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: rgba($text-muted, 0.6);
+    color: rgba($accent, 0.55);
 }
 
 .closeBtn {
@@ -91,11 +113,26 @@
 .artWrap {
     position: relative;
     z-index: 1;
-    margin: 12px 14px 0;
+    margin: 18px auto 0;
+    width: calc(100% - 48px);
+    max-width: 210px;
     border-radius: $radius-2xl;
     overflow: hidden;
     aspect-ratio: 1 / 1;
     flex-shrink: 0;
+    box-shadow:
+        0 16px 48px rgba(0, 0, 0, 0.55),
+        0 4px 16px rgba(0, 0, 0, 0.35),
+        0 0 0 1px rgba(white, 0.06);
+    transition: transform 300ms $ease-out, box-shadow 300ms $ease-out;
+
+    &:hover {
+        transform: scale(1.015);
+        box-shadow:
+            0 20px 56px rgba(0, 0, 0, 0.6),
+            0 6px 20px rgba($accent, 0.15),
+            0 0 0 1px rgba(white, 0.08);
+    }
 }
 
 .art {
@@ -113,16 +150,16 @@
     justify-content: center;
     background: linear-gradient(
         135deg,
-        rgba($accent, 0.15),
-        rgba($accent-teal, 0.08)
+        rgba($accent, 0.18),
+        rgba($accent-teal, 0.10)
     );
-    color: $text-muted;
+    color: rgba($text-muted, 0.5);
 }
 
 .artShine {
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, rgba(white, 0.04) 0%, transparent 60%);
+    background: linear-gradient(135deg, rgba(white, 0.07) 0%, transparent 55%);
     pointer-events: none;
 }
 
@@ -130,39 +167,74 @@
 .trackInfo {
     position: relative;
     z-index: 1;
-    padding: 14px 16px 0;
+    padding: 16px 18px 0;
     flex-shrink: 0;
+    text-align: center;
+}
+
+.trackNameRow {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 7px;
+    margin: 0 0 5px;
 }
 
 .trackName {
     font-size: 1rem;
     font-weight: 700;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.025em;
     color: $text-primary;
-    margin: 0 0 4px;
-    @include truncate;
+    margin: 0;
+    // Allow up to 2 lines before clipping — prevents overflow on long titles
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    line-height: 1.35;
 }
 
 .trackArtist {
     font-size: 0.875rem;
     color: $text-secondary;
-    margin: 0 0 2px;
-    @include truncate;
+    margin: 0 0 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .trackAlbum {
     font-size: 0.8125rem;
     color: $text-muted;
-    margin: 0 0 6px;
-    @include truncate;
+    margin: 0 0 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .fromPlaylist {
+    display: inline-block;
     font-size: 0.75rem;
-    color: rgba($accent, 0.8);
+    color: rgba($accent, 0.75);
     transition: color $transition-fast;
     &:hover {
         color: $accent;
+    }
+}
+
+// ── Playing bars (animated) ────────────────────────────────────
+.playingBars {
+    flex-shrink: 0;
+    color: $accent;
+    margin-top: 2px;
+
+    rect {
+        transform-box: fill-box;
+        transform-origin: center bottom;
+
+        &:nth-child(1) { animation: playBar 0.9s ease-in-out infinite 0.0s; }
+        &:nth-child(2) { animation: playBar 0.9s ease-in-out infinite 0.2s; }
+        &:nth-child(3) { animation: playBar 0.9s ease-in-out infinite 0.4s; }
     }
 }
 
@@ -194,10 +266,18 @@
         background $transition-fast,
         border-color $transition-fast;
 
-    &:hover {
-        color: $text-primary;
-        background: rgba(white, 0.08);
-        border-color: rgba(white, 0.12);
+    // Like button
+    &:first-child:hover {
+        color: hsl(350, 80%, 62%);
+        background: rgba(hsl(350, 80%, 62%), 0.09);
+        border-color: rgba(hsl(350, 80%, 62%), 0.25);
+    }
+
+    // Share button
+    &:last-child:hover {
+        color: $accent-teal;
+        background: rgba($accent-teal, 0.09);
+        border-color: rgba($accent-teal, 0.25);
     }
 }
 
@@ -217,18 +297,37 @@
 .queueLabel {
     font-size: 0.625rem;
     font-weight: 700;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: rgba($text-muted, 0.6);
+    color: rgba($accent-teal, 0.5);
     padding: 12px 16px 8px;
     flex-shrink: 0;
 }
 
-.queueList {
+.queueListWrap {
+    position: relative;
     flex: 1;
+    min-height: 0;
+
+    // Fade out at the bottom so it doesn't hard-clip
+    &::after {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 40px;
+        background: linear-gradient(to bottom, transparent, rgba($bg-elevated, 0.9));
+        pointer-events: none;
+        z-index: 1;
+    }
+}
+
+.queueList {
+    height: 100%;
     overflow-y: auto;
     list-style: none;
-    padding: 0 8px 8px;
+    padding: 0 8px 32px;
     margin: 0;
     scrollbar-width: thin;
     scrollbar-color: rgba(white, 0.06) transparent;
@@ -240,7 +339,7 @@
         background: transparent;
     }
     &::-webkit-scrollbar-thumb {
-        background: rgba(white, 0.06);
+        background: rgba(white, 0.07);
         border-radius: $radius-full;
     }
 }
@@ -249,39 +348,47 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 7px 8px;
+    padding: 6px 8px;
     border-radius: $radius-lg;
     width: 100%;
     text-align: left;
-    transition: background $transition-fast;
+    transition:
+        background $transition-fast,
+        transform $transition-fast;
 
     &:hover {
-        background: rgba(white, 0.05);
+        background: rgba(white, 0.06);
+        transform: translateX(2px);
+
+        .queueName {
+            color: $text-primary;
+        }
     }
 }
 
 .queuePos {
-    font-size: 0.75rem;
-    color: $text-muted;
-    width: 16px;
+    font-size: 0.6875rem;
+    color: rgba($text-muted, 0.5);
+    width: 14px;
     text-align: center;
     flex-shrink: 0;
     font-variant-numeric: tabular-nums;
 }
 
 .queueArt {
-    width: 36px;
-    height: 36px;
+    width: 38px;
+    height: 38px;
     border-radius: $radius-md;
     object-fit: cover;
     flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 .queueArtFallback {
-    width: 36px;
-    height: 36px;
+    width: 38px;
+    height: 38px;
     border-radius: $radius-md;
-    background: rgba($accent, 0.12);
+    background: linear-gradient(135deg, rgba($accent, 0.14), rgba($accent-teal, 0.08));
     flex-shrink: 0;
 }
 
@@ -296,7 +403,8 @@
 .queueName {
     font-size: 0.8125rem;
     font-weight: 500;
-    color: $text-primary;
+    color: rgba($text-primary, 0.85);
+    transition: color $transition-fast;
     @include truncate;
 }
 
@@ -304,10 +412,6 @@
     font-size: 0.75rem;
     color: $text-muted;
     @include truncate;
-}
-
-.playingBars {
-    flex-shrink: 0;
 }
 
 // ── Empty state ───────────────────────────────────────────────
@@ -323,8 +427,8 @@
 
 .emptyIcon {
     color: $text-muted;
-    opacity: 0.4;
-    margin-bottom: 12px;
+    opacity: 0.3;
+    margin-bottom: 14px;
 }
 
 .emptyTitle {
@@ -337,15 +441,15 @@
 .emptyDesc {
     font-size: 0.8125rem;
     color: $text-muted;
-    line-height: 1.5;
+    line-height: 1.55;
     margin: 0;
 }
 
 .emptyBtn {
     display: inline-flex;
     align-items: center;
-    margin-top: 16px;
-    padding: 8px 18px;
+    margin-top: 18px;
+    padding: 8px 20px;
     font-size: 0.8125rem;
     font-weight: 600;
     color: $accent;
@@ -354,10 +458,12 @@
     text-decoration: none;
     transition:
         background $transition-fast,
-        border-color $transition-fast;
+        border-color $transition-fast,
+        color $transition-fast;
 
     &:hover {
-        background: rgba($accent, 0.08);
-        border-color: rgba($accent, 0.5);
+        background: rgba($accent, 0.1);
+        border-color: rgba($accent, 0.55);
+        color: $accent-glow;
     }
 }

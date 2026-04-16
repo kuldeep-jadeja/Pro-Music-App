@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { useEffect, useRef, useState } from 'react';
 import styles from '@/styles/Navbar.module.scss';
 
 function SearchIcon() {
@@ -33,7 +34,31 @@ function PanelCloseIcon() {
     );
 }
 
+function LogoutIcon() {
+    return (
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true">
+            <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
+        </svg>
+    );
+}
+
 export default function Navbar({ user, onLogout, onMenuToggle, isSidebarOpen, onPanelToggle, isPanelOpen, currentTrack }) {
+    const userInitial = user?.email?.[0]?.toUpperCase() ?? '?';
+    const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+    const avatarRef = useRef(null);
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        if (!avatarMenuOpen) return;
+        function handleOutside(e) {
+            if (avatarRef.current && !avatarRef.current.contains(e.target)) {
+                setAvatarMenuOpen(false);
+            }
+        }
+        document.addEventListener('mousedown', handleOutside);
+        return () => document.removeEventListener('mousedown', handleOutside);
+    }, [avatarMenuOpen]);
+
     return (
         <header className={styles.navbar}>
             {/* Hamburger — mobile only */}
@@ -48,7 +73,10 @@ export default function Navbar({ user, onLogout, onMenuToggle, isSidebarOpen, on
                 </svg>
             </button>
 
-            {/* Search */}
+            {/* Brand — mobile only, centered absolutely */}
+            <span className={styles.mobileBrand} aria-hidden="true">Demus</span>
+
+            {/* Search bar — desktop only */}
             <div className={`${styles.searchWrap}${!user ? ` ${styles.searchWrapDisabled}` : ''}`}>
                 <span className={styles.searchIcon}><SearchIcon /></span>
                 <input
@@ -62,9 +90,8 @@ export default function Navbar({ user, onLogout, onMenuToggle, isSidebarOpen, on
                 />
             </div>
 
-            {/* Right controls */}
+            {/* Desktop right controls */}
             <div className={styles.controls}>
-                {/* Desktop panel toggle */}
                 {onPanelToggle && (
                     <button
                         className={`${styles.panelToggle}${isPanelOpen ? ` ${styles.panelToggleActive}` : ''}`}
@@ -76,7 +103,6 @@ export default function Navbar({ user, onLogout, onMenuToggle, isSidebarOpen, on
                     </button>
                 )}
 
-                {/* Notification bell */}
                 <button className={styles.bellBtn} aria-label="Notifications">
                     <BellIcon />
                     {currentTrack && <span className={styles.bellDot} aria-hidden="true" />}
@@ -98,7 +124,50 @@ export default function Navbar({ user, onLogout, onMenuToggle, isSidebarOpen, on
                     </>
                 )}
             </div>
+
+            {/* Mobile right controls — compact icon row */}
+            <div className={styles.mobileControls}>
+                <button className={styles.mobileSearchBtn} aria-label="Search">
+                    <SearchIcon />
+                </button>
+
+                <button className={styles.bellBtn} aria-label="Notifications">
+                    <BellIcon />
+                    {currentTrack && <span className={styles.bellDot} aria-hidden="true" />}
+                </button>
+
+                {user ? (
+                    <div className={styles.avatarWrap} ref={avatarRef}>
+                        <button
+                            className={styles.avatarBtn}
+                            onClick={() => setAvatarMenuOpen(o => !o)}
+                            aria-label="Account menu"
+                            aria-expanded={avatarMenuOpen}
+                            aria-haspopup="menu"
+                        >
+                            {userInitial}
+                        </button>
+                        {avatarMenuOpen && (
+                            <div className={styles.avatarMenu} role="menu">
+                                <div className={styles.avatarMenuEmail}>{user.email}</div>
+                                <div className={styles.avatarMenuDivider} aria-hidden="true" />
+                                <button
+                                    className={styles.avatarMenuLogout}
+                                    role="menuitem"
+                                    onClick={() => { setAvatarMenuOpen(false); onLogout(); }}
+                                >
+                                    <LogoutIcon />
+                                    Log out
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <Link href="/login" className={styles.mobileLoginBtn}>
+                        Log in
+                    </Link>
+                )}
+            </div>
         </header>
     );
 }
-

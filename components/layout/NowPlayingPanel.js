@@ -114,7 +114,10 @@ export default function NowPlayingPanel({
 
                     {/* Track info */}
                     <div className={styles.trackInfo}>
-                        <p className={styles.trackName}>{currentTrack.name}</p>
+                        <div className={styles.trackNameRow}>
+                            <p className={styles.trackName}>{currentTrack.name}</p>
+                            <PlayingBarsIcon />
+                        </div>
                         <p className={styles.trackArtist}>
                             {currentTrack.artists?.join(', ')}
                         </p>
@@ -147,6 +150,7 @@ export default function NowPlayingPanel({
                     {upcoming.length > 0 && (
                         <div className={styles.queue}>
                             <p className={styles.queueLabel}>Up next</p>
+                            <div className={styles.queueListWrap}>
                             <ul className={styles.queueList} role="list">
                                 {upcoming.map(({ track, queueIndex }, i) => (
                                     <li key={track.id ?? track._id}>
@@ -177,6 +181,7 @@ export default function NowPlayingPanel({
                                     </li>
                                 ))}
                             </ul>
+                            </div>
                         </div>
                     )}
                 </>
