@@ -1,12 +1,13 @@
 /**
- * enrichGenres.js — Backfill Last.fm genre tags for existing tracks missing genres
+ * enrichGenres.js — Backfill multi-source genre tags for tracks missing genres
  *
- * Queries Track documents where genres array is empty (or missing), calls Last.fm
- * track.getInfo for each, normalizes and writes genres/primaryGenre back to MongoDB.
+ * Queries Track documents where genres array is empty (or missing), resolves genres
+ * via worker enrichment providers (Spotify artist genres, Last.fm, TheAudioDB,
+ * Deezer, MusicBrainz), and writes genres/primaryGenre back to MongoDB.
  *
  * Features:
  *   - Batch cursor (BATCH_SIZE docs per MongoDB query — never loads full collection)
- *   - Last.fm rate-limited to 1 req / LASTFM_DELAY_MS (default 500ms)
+ *   - Provider waterfall via workers/lib/enrichment (Spotify, Last.fm, AudioDB, Deezer, MusicBrainz)
  *   - Graceful SIGINT — finishes current batch, then exits cleanly
  *   - --dry-run flag — logs what would be written, no DB writes
  *   - --limit N flag — stop after N tracks processed (useful for testing)
@@ -24,6 +25,7 @@
 const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
+const { enrichTrackGenres } = require('../workers/lib/enrichment');
 
 // ─── Load .env.local ──────────────────────────────────────────────────────────
 (function loadEnvLocal() {
@@ -44,10 +46,7 @@ const mongoose = require('mongoose');
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const MONGODB_URI = process.env.MONGODB_URI;
-const LASTFM_API_KEY = process.env.LASTFM_API_KEY;
 const BATCH_SIZE = 100;           // tracks fetched per MongoDB query
-const LASTFM_DELAY_MS = 550;      // ~1 req/s with buffer (Last.fm soft limit)
-const LASTFM_TIMEOUT_MS = 9000;
 
 // ─── CLI flags ────────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -56,7 +55,6 @@ const limitIdx = args.indexOf('--limit');
 const LIMIT = limitIdx !== -1 ? parseInt(args[limitIdx + 1], 10) : Infinity;
 
 if (!MONGODB_URI) { console.error('[enrichGenres] MONGODB_URI not set'); process.exit(1); }
-if (!LASTFM_API_KEY) { console.error('[enrichGenres] LASTFM_API_KEY not set — add it to .env.local'); process.exit(1); }
 if (DRY_RUN) console.log('[enrichGenres] DRY RUN — no DB writes');
 if (LIMIT !== Infinity) console.log(`[enrichGenres] Limit: ${LIMIT} tracks`);
 
@@ -77,8 +75,6 @@ const TrackSchema = new mongoose.Schema(
 );
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
 function normalizeGenreToken(value) {
     if (typeof value !== 'string') return null;
     const trimmed = value.trim().toLowerCase();
@@ -104,33 +100,6 @@ function normalizeGenres(input) {
         if (deduped.length >= 5) break;
     }
     return deduped;
-}
-
-// ─── Last.fm fetch ────────────────────────────────────────────────────────────
-async function fetchLastfmGenres(artist, trackName) {
-    const url =
-        `https://ws.audioscrobbler.com/2.0/?method=track.getInfo` +
-        `&api_key=${LASTFM_API_KEY}` +
-        `&artist=${encodeURIComponent(artist)}` +
-        `&track=${encodeURIComponent(trackName)}` +
-        `&format=json&autocorrect=1`;
-
-    try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(LASTFM_TIMEOUT_MS) });
-        if (!res.ok) return null;
-        const json = await res.json();
-        if (json.error) return null;
-
-        const tags = json.track?.toptags?.tag;
-        if (!Array.isArray(tags) || tags.length === 0) return null;
-
-        return tags
-            .map(t => (typeof t.name === 'string' ? t.name.trim() : ''))
-            .filter(Boolean)
-            .slice(0, 5);
-    } catch (_err) {
-        return null;
-    }
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -191,7 +160,17 @@ async function run() {
 
         console.log(`[enrichGenres] Batch ${Math.floor(offset / BATCH_SIZE) + 1}: ${batch.length} tracks`);
 
-        for (const track of batch) {
+        const candidates = batch.map((track) => ({
+            name: track.name || '',
+            artists: Array.isArray(track.artists) ? track.artists : [],
+            spotifyId: track.spotifyId || null,
+            genres: Array.isArray(track.genres) ? track.genres : [],
+        }));
+        await enrichTrackGenres(candidates, 'enrichGenres');
+
+        for (let idx = 0; idx < batch.length; idx++) {
+            const track = batch[idx];
+            const candidate = candidates[idx];
             if (stopping || processed >= LIMIT) break;
 
             const artist = track.artists?.[0] || '';
@@ -203,22 +182,37 @@ async function run() {
                 continue;
             }
 
-            const rawTags = await fetchLastfmGenres(artist, name);
-
-            if (!rawTags || rawTags.length === 0) {
-                console.log(`  [skip] "${name}" — no Last.fm tags`);
+            const rawTags = Array.isArray(candidate?._genreTags) ? candidate._genreTags : [];
+            if (rawTags.length === 0) {
+                console.log(`  [skip] "${name}" — no genre tags from providers`);
                 failed++;
                 processed++;
-                await sleep(LASTFM_DELAY_MS);
                 continue;
             }
 
             const genres = normalizeGenres(rawTags);
             const primaryGenre = genres[0];
+            const genreSource = typeof candidate?._genreSource === 'string'
+                ? candidate._genreSource
+                : 'unknown';
+            const genreConfidence = Number.isFinite(Number(candidate?._genreConfidence))
+                ? Number(candidate._genreConfidence)
+                : null;
 
             if (DRY_RUN) {
-                console.log(`  [dry-run] "${name}" → genres: [${genres.join(', ')}]`);
+                console.log(
+                    `  [dry-run] "${name}" → genres: [${genres.join(', ')}] (source=${genreSource})`
+                );
             } else {
+                const setPatch = {
+                    genres,
+                    primaryGenre,
+                    'metadataSources.genre': genreSource,
+                    metadataUpdatedAt: new Date(),
+                };
+                if (typeof genreConfidence === 'number') {
+                    setPatch.genreConfidence = Math.max(0, Math.min(1, genreConfidence));
+                }
                 await Track.updateOne(
                     {
                         _id: track._id,
@@ -229,21 +223,15 @@ async function run() {
                         ],
                     },
                     {
-                        $set: {
-                            genres,
-                            primaryGenre,
-                            'metadataSources.genre': 'lastfm',
-                            metadataUpdatedAt: new Date(),
-                        },
+                        $set: setPatch,
                         $inc: { metadataAttempts: 1 },
                     }
                 );
-                console.log(`  [ok] "${name}" → [${genres.join(', ')}]`);
+                console.log(`  [ok] "${name}" → [${genres.join(', ')}] (${genreSource})`);
             }
 
             enriched++;
             processed++;
-            await sleep(LASTFM_DELAY_MS);
         }
 
         // If batch was smaller than BATCH_SIZE, we've exhausted the cursor

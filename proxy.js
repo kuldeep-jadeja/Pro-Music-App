@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 /**
- * Next.js Edge Middleware — wildcard admin route protection
+ * Next.js Edge Proxy — wildcard admin route protection
  *
  * Matcher: /admin/:path* — protects ALL current and future admin page routes.
  *
@@ -11,9 +11,9 @@ import { NextResponse } from 'next/server';
  *   - Decode payload to check email claim against ADMIN_EMAIL env var
  *
  * Redirect policy:
- *   - No valid JWT / expired token → /login
- *   - Valid JWT but email != ADMIN_EMAIL → /?adminAccess=required
- *   - Valid JWT and email == ADMIN_EMAIL → allow request to continue
+ *   - No valid JWT / expired token -> /login
+ *   - Valid JWT but email != ADMIN_EMAIL -> /?adminAccess=required
+ *   - Valid JWT and email == ADMIN_EMAIL -> allow request to continue
  */
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -86,11 +86,11 @@ function normalizeEmail(email) {
     return email.trim().toLowerCase();
 }
 
-export async function middleware(request) {
+export async function proxy(request) {
     // Only runs for /admin/:path* routes (via matcher config below)
     const cookieToken = request.cookies.get('token')?.value;
 
-    // No JWT cookie — user is not authenticated → redirect to /login
+    // No JWT cookie — user is not authenticated -> redirect to /login
     if (!cookieToken) {
         const loginUrl = new URL('/login', request.url);
         return NextResponse.redirect(loginUrl);
@@ -104,7 +104,7 @@ export async function middleware(request) {
 
     const payload = await verifyJWT(cookieToken, JWT_SECRET);
 
-    // Invalid or expired JWT → redirect to /login
+    // Invalid or expired JWT -> redirect to /login
     if (!payload) {
         const loginUrl = new URL('/login', request.url);
         return NextResponse.redirect(loginUrl);
@@ -120,7 +120,7 @@ export async function middleware(request) {
         normalizeEmail(tokenEmail) === normalizeEmail(ADMIN_EMAIL);
 
     if (!isAdmin) {
-        // Authenticated but not admin → redirect to home with flag
+        // Authenticated but not admin -> redirect to home with flag
         const homeUrl = new URL('/?adminAccess=required', request.url);
         return NextResponse.redirect(homeUrl);
     }

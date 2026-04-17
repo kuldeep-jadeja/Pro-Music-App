@@ -180,14 +180,21 @@ async function enqueueMatchJob(redis, job) {
 async function enqueueGenreJobs(redis, tracks) {
     if (!redis) return;
     for (const track of tracks) {
-        if (!track._lastfmTags?.length || !track.spotifyId) continue;
+        const genreTags = Array.isArray(track._genreTags) && track._genreTags.length
+            ? track._genreTags
+            : (Array.isArray(track._lastfmTags) ? track._lastfmTags : []);
+        if (!genreTags.length || !track.spotifyId) continue;
+        const source = track._genreSource || 'lastfm';
         try {
             await redis.rpush(METADATA_QUEUE_KEY, JSON.stringify({
                 spotifyId: track.spotifyId,
                 computedMetadata: {
-                    genres: track._lastfmTags,
-                    primaryGenre: track._lastfmTags[0],
-                    metadataSources: { genre: 'lastfm' },
+                    genres: genreTags,
+                    primaryGenre: genreTags[0],
+                    ...(typeof track._genreConfidence === 'number'
+                        ? { genreConfidence: track._genreConfidence }
+                        : {}),
+                    metadataSources: { genre: source },
                 },
             }));
         } catch (err) {
