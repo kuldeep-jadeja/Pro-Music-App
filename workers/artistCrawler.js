@@ -53,6 +53,7 @@ const MONGODB_URI = process.env.MONGODB_URI;
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 const QUEUE_KEY = 'demus:ytmatch:queue';
 const METADATA_QUEUE_KEY = 'demus:metadata:queue';
+const METADATA_QUEUE_LOCK_PREFIX = 'demus:metadata:queued:';
 
 // ─── Safety limits ────────────────────────────────────────────────────────────
 const MAX_ARTISTS_PER_RUN = 20;
@@ -156,6 +157,9 @@ async function enqueueGenreJobs(redis, tracks) {
         if (!genreTags.length || !track.spotifyId) continue;
         const source = track._genreSource || 'lastfm';
         try {
+            const lockKey = `${METADATA_QUEUE_LOCK_PREFIX}${track.spotifyId}`;
+            const lockStatus = await redis.set(lockKey, '1', 'EX', 3600, 'NX');
+            if (lockStatus !== 'OK') continue;
             await redis.rpush(METADATA_QUEUE_KEY, JSON.stringify({
                 spotifyId: track.spotifyId,
                 computedMetadata: {

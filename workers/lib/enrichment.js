@@ -14,12 +14,15 @@
  *   4. Last.fm              — optional (requires LASTFM_API_KEY env), also extracts genre tags
  *   5. MusicBrainz + CAA    — last resort, strict 1 req/s rate limit
  *
- * Genre chain (in order):
- *   1. Spotify Web API (artist genres via anonymous embed token)
- *   2. Last.fm track tags (if LASTFM_API_KEY exists)
- *   3. TheAudioDB track metadata
- *   4. Deezer artist/genre endpoints
+ * Genre chain (configurable via GENRE_PROVIDER_ORDER):
+ *   1. Last.fm (track + artist tags)
+ *   2. TheAudioDB
+ *   3. Genius (optional, requires GENIUS_ACCESS_TOKEN)
+ *   4. Discogs
  *   5. MusicBrainz recording tags/genres
+ *   6. Deezer artist/genre endpoints
+ *   7. Spotify artist genres
+ *   8. Gemini AI fallback (backfill-only)
  *
  * Each tier function:
  *   - Accepts a single track object (mutates album / albumImage / _enrichSource in place)
@@ -30,15 +33,25 @@
  *   enrichTracks(tracks, tag)  — orchestrates all tiers; filters after each
  */
 
+const Redis = require('ioredis');
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 const isDev = process.env.NODE_ENV !== 'production';
 const LASTFM_MIN_GAP_MS = 550;
 const MUSICBRAINZ_MIN_GAP_MS = 1100;
 const MIN_MUSICBRAINZ_TAG_WEIGHT = 2;
-const DEFAULT_GENRE_PROVIDER_ORDER = ['spotify', 'lastfm', 'theaudiodb', 'deezer', 'musicbrainz'];
+const DEFAULT_GENRE_PROVIDER_ORDER = ['lastfm', 'theaudiodb', 'genius', 'discogs', 'musicbrainz', 'deezer', 'spotify', 'gemini'];
+const DISCOGS_USER_AGENT = process.env.DISCOGS_USER_AGENT || 'Demus/1.0 (https://github.com/demus-app)';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const GEMINI_MIN_CONFIDENCE = Math.max(0, Math.min(1, Number(process.env.GEMINI_MIN_CONFIDENCE || 0.55)));
+const GENRE_FAILURE_TTL_SECONDS = 7 * 24 * 60 * 60;
+const GENRE_FAILURE_MAX_ATTEMPTS = 3;
+const GENRE_FAILURE_KEY_PREFIX = 'demus:genre:failed:';
 let lastLastfmRequestAt = 0;
 let lastMusicBrainzRequestAt = 0;
+let failureRedis = null;
+let failureRedisUnavailable = false;
+let failureRedisWarned = false;
 const LOW_QUALITY_GENRE_TOKENS = new Set([
     'unknown',
     'misc',
@@ -83,10 +96,19 @@ function logWarn(tag, msg) {
 
 /** Strip feat/remix/version tokens that confuse music search engines. */
 function cleanTrackName(name) {
+    if (typeof name !== 'string') return '';
     return name
         .replace(/\s*[\(\[](feat|ft|with|prod)[^\)\]]*[\)\]]/gi, '')
         .replace(/\s*-\s*(radio|acoustic|live|demo|remix|remaster(?:ed)?|version|edit|extended|alt(?:ernate)?).*$/gi, '')
         .replace(/\s*\([^)]*\)\s*$/, '')
+        .trim();
+}
+
+function cleanArtistName(artist) {
+    if (typeof artist !== 'string') return '';
+    return artist
+        .split(/[,&/]/)[0]
+        .replace(/\b(feat|ft|with)\b.*$/i, '')
         .trim();
 }
 
@@ -147,14 +169,14 @@ function isLowSignalLastfmGenre(value) {
 function setTrackGenres(track, values, source, confidence) {
     const genres = normalizeGenres(values)
         .filter((value) => !isLowQualityGenre(value))
-        .filter((value) => (source === 'lastfm' ? !isLowSignalLastfmGenre(value) : true));
+        .filter((value) => (source.startsWith('lastfm') ? !isLowSignalLastfmGenre(value) : true));
     if (!genres.length) return false;
     track._genreTags = genres;
     track._genreSource = source;
     if (typeof confidence === 'number') {
         track._genreConfidence = Math.max(0, Math.min(1, confidence));
     }
-    if (source === 'lastfm') {
+    if (source.startsWith('lastfm')) {
         track._lastfmTags = genres;
     }
     return true;
@@ -177,7 +199,7 @@ async function throttleProvider(minGapMs, timestampRef) {
 }
 
 function getPrimaryArtist(track) {
-    return typeof track.artists?.[0] === 'string' ? track.artists[0].trim() : '';
+    return cleanArtistName(track.artists?.[0] || '');
 }
 
 function normalizeArtistCacheKey(value) {
@@ -190,7 +212,117 @@ function normalizeProviderName(value) {
     const normalized = String(value || '').trim().toLowerCase();
     if (normalized === 'audiodb' || normalized === 'audio-db') return 'theaudiodb';
     if (normalized === 'spotify-artist') return 'spotify';
+    if (normalized === 'last-fm') return 'lastfm';
+    if (normalized === 'gemini-ai' || normalized === 'google-gemini') return 'gemini';
     return normalized;
+}
+
+function normalizeCacheKeyPart(value) {
+    if (typeof value !== 'string') return '';
+    return value
+        .toLowerCase()
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '')
+        .slice(0, 64);
+}
+
+function getFailureCacheKey(track) {
+    const artist = normalizeCacheKeyPart(getPrimaryArtist(track));
+    const name = normalizeCacheKeyPart(cleanTrackName(track.name || '') || track.name || '');
+    if (!artist || !name) return null;
+    return `${GENRE_FAILURE_KEY_PREFIX}${artist}:${name}`;
+}
+
+function getFailureRedisClient() {
+    if (failureRedisUnavailable) return null;
+    if (!process.env.REDIS_URL) return null;
+    if (failureRedis) return failureRedis;
+    try {
+        failureRedis = new Redis(process.env.REDIS_URL, {
+            lazyConnect: false,
+            enableOfflineQueue: true,
+            maxRetriesPerRequest: 1,
+            retryStrategy() {
+                return null;
+            },
+        });
+        failureRedis.on('error', () => {});
+        return failureRedis;
+    } catch (err) {
+        disableNegativeCache(err.message);
+        return null;
+    }
+}
+
+function disableNegativeCache(reason) {
+    if (failureRedis) {
+        try { failureRedis.disconnect(); } catch (_) { /* noop */ }
+    }
+    failureRedis = null;
+    failureRedisUnavailable = true;
+    if (!failureRedisWarned) {
+        failureRedisWarned = true;
+        logWarn('enrichment', `Redis negative-cache disabled: ${reason}`);
+    }
+}
+
+async function shouldSkipByNegativeCache(track) {
+    const key = getFailureCacheKey(track);
+    if (!key) return false;
+    const redis = getFailureRedisClient();
+    if (!redis) return false;
+    try {
+        const raw = await redis.get(key);
+        if (!raw) return false;
+        const parsed = JSON.parse(raw);
+        const attempts = Number(parsed?.attempts || 0);
+        const lastAttempt = Number(parsed?.lastAttempt || 0);
+        if (attempts >= GENRE_FAILURE_MAX_ATTEMPTS) return true;
+        return Number.isFinite(lastAttempt) && (Date.now() - lastAttempt < GENRE_FAILURE_TTL_SECONDS * 1000);
+    } catch (err) {
+        disableNegativeCache(err.message);
+        return false;
+    }
+}
+
+async function markNegativeCacheFailure(track, reason = 'no_genres') {
+    const key = getFailureCacheKey(track);
+    if (!key) return;
+    const redis = getFailureRedisClient();
+    if (!redis) return;
+    try {
+        let attempts = 1;
+        const raw = await redis.get(key);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            attempts = Number(parsed?.attempts || 0) + 1;
+        }
+        await redis.set(
+            key,
+            JSON.stringify({
+                attempts,
+                reason,
+                lastAttempt: Date.now(),
+            }),
+            'EX',
+            GENRE_FAILURE_TTL_SECONDS
+        );
+    } catch (err) {
+        disableNegativeCache(err.message);
+    }
+}
+
+async function clearNegativeCacheFailure(track) {
+    const key = getFailureCacheKey(track);
+    if (!key) return;
+    const redis = getFailureRedisClient();
+    if (!redis) return;
+    try {
+        await redis.del(key);
+    } catch (err) {
+        disableNegativeCache(err.message);
+    }
 }
 
 function getGenreProviderOrder() {
@@ -221,7 +353,7 @@ function getGenreProviderOrder() {
 
 async function fetchFromItunes(track) {
     const MAX_RETRIES = 3;
-    const artist = track.artists?.[0] || '';
+    const artist = cleanArtistName(track.artists?.[0] || '');
     const cleanName = cleanTrackName(track.name);
     const queries = cleanName !== track.name
         ? [`${artist} ${cleanName}`, `${artist} ${track.name}`]
@@ -274,7 +406,7 @@ async function fetchFromItunes(track) {
 // Bonus: fills missing duration (Deezer returns seconds → converted to ms).
 
 async function fetchFromDeezer(track) {
-    const artist = track.artists?.[0] || '';
+    const artist = cleanArtistName(track.artists?.[0] || '');
     const name = track.name || '';
     if (!artist && !name) return false;
 
@@ -328,7 +460,7 @@ async function fetchFromDeezer(track) {
 const THEAUDIODB_KEY = process.env.THEAUDIODB_API_KEY || '2';
 
 async function fetchFromTheAudioDB(track) {
-    const artist = track.artists?.[0] || '';
+    const artist = cleanArtistName(track.artists?.[0] || '');
     const name = track.name || '';
     if (!artist || !name) return false;
 
@@ -689,6 +821,222 @@ async function fetchGenresFromAudioDb(track, cache) {
     return false;
 }
 
+async function fetchGenresFromGenius(track, cache) {
+    const token = process.env.GENIUS_ACCESS_TOKEN;
+    if (!token) return false;
+
+    const artist = getPrimaryArtist(track);
+    const name = cleanTrackName(track.name || '');
+    if (!artist || !name) return false;
+
+    const cacheKey = `${artist.toLowerCase()}::${name.toLowerCase()}`;
+    if (cache.geniusTags.has(cacheKey)) {
+        return setTrackGenres(track, cache.geniusTags.get(cacheKey), 'genius', 0.55);
+    }
+
+    try {
+        const q = encodeURIComponent(`${artist} ${name}`);
+        const searchRes = await fetch(`https://api.genius.com/search?q=${q}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: AbortSignal.timeout(9000),
+        });
+        if (!searchRes.ok) {
+            cache.geniusTags.set(cacheKey, []);
+            return false;
+        }
+        const searchJson = await searchRes.json();
+        const hit = searchJson?.response?.hits?.[0]?.result;
+        if (!hit?.id) {
+            cache.geniusTags.set(cacheKey, []);
+            return false;
+        }
+
+        const songRes = await fetch(`https://api.genius.com/songs/${hit.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: AbortSignal.timeout(9000),
+        });
+        if (!songRes.ok) {
+            cache.geniusTags.set(cacheKey, []);
+            return false;
+        }
+        const songJson = await songRes.json();
+        const song = songJson?.response?.song;
+        const tags = [
+            song?.primary_tag?.name,
+            ...(Array.isArray(song?.tags) ? song.tags.map((t) => t?.name) : []),
+        ].filter(Boolean);
+
+        cache.geniusTags.set(cacheKey, tags);
+        return setTrackGenres(track, tags, 'genius', 0.55);
+    } catch (err) {
+        logWarn('enrichment', `Genius genre fetch failed for "${track.name}": ${err.message}`);
+        return false;
+    }
+}
+
+async function fetchGenresFromDiscogs(track, cache) {
+    const artist = getPrimaryArtist(track);
+    const name = cleanTrackName(track.name || '');
+    if (!artist || !name) return false;
+
+    const cacheKey = `${artist.toLowerCase()}::${name.toLowerCase()}`;
+    if (cache.discogsTags.has(cacheKey)) {
+        return setTrackGenres(track, cache.discogsTags.get(cacheKey), 'discogs', 0.6);
+    }
+
+    try {
+        const query = encodeURIComponent(`${artist} ${name}`);
+        const res = await fetch(
+            `https://api.discogs.com/database/search?q=${query}&type=release&per_page=5`,
+            {
+                headers: { 'User-Agent': DISCOGS_USER_AGENT },
+                signal: AbortSignal.timeout(10000),
+            }
+        );
+        if (!res.ok) {
+            cache.discogsTags.set(cacheKey, []);
+            return false;
+        }
+        const json = await res.json();
+        const hit = json?.results?.find((item) =>
+            typeof item?.title === 'string' &&
+            item.title.toLowerCase().includes(artist.toLowerCase())
+        ) || json?.results?.[0];
+        const tags = [
+            ...(Array.isArray(hit?.genre) ? hit.genre : []),
+            ...(Array.isArray(hit?.style) ? hit.style : []),
+        ];
+        cache.discogsTags.set(cacheKey, tags);
+        return setTrackGenres(track, tags, 'discogs', 0.6);
+    } catch (err) {
+        logWarn('enrichment', `Discogs genre fetch failed for "${track.name}": ${err.message}`);
+        return false;
+    }
+}
+
+function extractJsonFromText(value) {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    try {
+        return JSON.parse(trimmed);
+    } catch (_) {
+        const start = trimmed.indexOf('{');
+        const end = trimmed.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            try {
+                return JSON.parse(trimmed.slice(start, end + 1));
+            } catch (_) {
+                return null;
+            }
+        }
+        return null;
+    }
+}
+
+async function fetchGenresFromGemini(track, cache, tag) {
+    if (tag !== 'enrichGenres') return false;
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return false;
+
+    const artist = getPrimaryArtist(track);
+    const name = cleanTrackName(track.name || '');
+    if (!artist || !name) return false;
+
+    const cacheKey = `${artist.toLowerCase()}::${name.toLowerCase()}`;
+    if (cache.geminiModelTags.has(cacheKey)) {
+        const cached = cache.geminiModelTags.get(cacheKey);
+        return setTrackGenres(track, cached.genres, 'gemini', cached.confidence);
+    }
+
+    const prompt =
+        `Classify this song into 1-3 genres.\n` +
+        `Artist: "${artist}"\n` +
+        `Track: "${name}"\n` +
+        `Return only JSON like {"genres":["genre1","genre2"],"confidence":0.0}. ` +
+        `Use empty genres if unknown.`;
+
+    try {
+        const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: AbortSignal.timeout(15000),
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.1,
+                        responseMimeType: 'application/json',
+                    },
+                }),
+            }
+        );
+        if (!res.ok) {
+            cache.geminiModelTags.set(cacheKey, { genres: [], confidence: 0 });
+            return false;
+        }
+        const data = await res.json();
+        const text = Array.isArray(data?.candidates?.[0]?.content?.parts)
+            ? data.candidates[0].content.parts.map((part) => part?.text || '').join('\n')
+            : '';
+        const parsed = extractJsonFromText(text);
+        const genres = normalizeGenres(Array.isArray(parsed?.genres) ? parsed.genres : []);
+        const confidence = Number.isFinite(Number(parsed?.confidence))
+            ? Math.max(0, Math.min(1, Number(parsed.confidence)))
+            : 0;
+
+        cache.geminiModelTags.set(cacheKey, { genres, confidence });
+        if (!genres.length || confidence < GEMINI_MIN_CONFIDENCE) return false;
+        return setTrackGenres(track, genres, 'gemini', confidence);
+    } catch (err) {
+        logWarn('enrichment', `Gemini genre fetch failed for "${track.name}": ${err.message}`);
+        return false;
+    }
+}
+
+async function fetchGenresFromLastfmArtist(track, cache) {
+    const key = process.env.LASTFM_API_KEY;
+    if (!key) return false;
+
+    const artist = getPrimaryArtist(track);
+    const artistKey = normalizeArtistCacheKey(artist);
+    if (!artist || !artistKey) return false;
+
+    if (cache.lastfmArtistTags.has(artistKey)) {
+        return setTrackGenres(track, cache.lastfmArtistTags.get(artistKey), 'lastfm-artist', 0.75);
+    }
+
+    try {
+        await throttleProvider(LASTFM_MIN_GAP_MS, {
+            get value() {
+                return lastLastfmRequestAt;
+            },
+            set value(next) {
+                lastLastfmRequestAt = next;
+            },
+        });
+        const url = `https://ws.audioscrobbler.com/2.0/?method=artist.getTopTags` +
+            `&api_key=${key}` +
+            `&artist=${encodeURIComponent(artist)}` +
+            `&format=json&autocorrect=1`;
+        const res = await fetch(url, { signal: AbortSignal.timeout(9000) });
+        if (!res.ok) {
+            cache.lastfmArtistTags.set(artistKey, []);
+            return false;
+        }
+        const json = await res.json();
+        const tags = Array.isArray(json?.toptags?.tag)
+            ? json.toptags.tag.map((t) => t?.name).filter(Boolean).slice(0, 6)
+            : [];
+        cache.lastfmArtistTags.set(artistKey, tags);
+        return setTrackGenres(track, tags, 'lastfm-artist', 0.75);
+    } catch (err) {
+        logWarn('enrichment', `Last.fm artist tags failed for "${artist}": ${err.message}`);
+        return false;
+    }
+}
+
 async function fetchGenresFromDeezer(track, cache) {
     const artist = getPrimaryArtist(track);
     const name = track.name || '';
@@ -816,7 +1164,11 @@ async function enrichTrackGenres(tracks, tag) {
         trackArtistIds: new Map(),
         artistGenres: new Map(),
         artistNameGenres: new Map(),
+        lastfmArtistTags: new Map(),
         audioDb: new Map(),
+        geniusTags: new Map(),
+        discogsTags: new Map(),
+        geminiModelTags: new Map(),
         deezerArtistGenres: new Map(),
         artistGenreMemory: new Map(),
     };
@@ -830,11 +1182,15 @@ async function enrichTrackGenres(tracks, tag) {
         lastfm: async (track) => {
             if (!process.env.LASTFM_API_KEY) return false;
             await fetchFromLastfm(track);
-            return hasComputedGenres(track);
+            if (hasComputedGenres(track)) return true;
+            return fetchGenresFromLastfmArtist(track, cache);
         },
         theaudiodb: (track) => fetchGenresFromAudioDb(track, cache),
+        genius: (track) => fetchGenresFromGenius(track, cache),
+        discogs: (track) => fetchGenresFromDiscogs(track, cache),
         deezer: (track) => fetchGenresFromDeezer(track, cache),
         musicbrainz: (track) => fetchGenresFromMusicBrainz(track),
+        gemini: (track) => fetchGenresFromGemini(track, cache, tag),
     };
 
     if (isDev) {
@@ -845,6 +1201,11 @@ async function enrichTrackGenres(tracks, tag) {
     for (const track of targets) {
         let resolved = false;
         const artistCacheKey = normalizeArtistCacheKey(getPrimaryArtist(track));
+
+        if (await shouldSkipByNegativeCache(track)) {
+            unresolved++;
+            continue;
+        }
 
         if (!resolved && artistCacheKey && cache.artistGenreMemory.has(artistCacheKey)) {
             resolved = setTrackGenres(
@@ -868,7 +1229,9 @@ async function enrichTrackGenres(tracks, tag) {
             if (artistCacheKey && Array.isArray(track._genreTags) && track._genreTags.length > 0) {
                 cache.artistGenreMemory.set(artistCacheKey, track._genreTags);
             }
+            await clearNegativeCacheFailure(track);
         } else {
+            await markNegativeCacheFailure(track);
             unresolved++;
         }
     }
@@ -981,4 +1344,4 @@ async function enrichTracks(tracks, tag) {
     await enrichTrackGenres(tracks, tag);
 }
 
-module.exports = { enrichTracks, enrichTrackGenres, cleanTrackName };
+module.exports = { enrichTracks, enrichTrackGenres, cleanTrackName, cleanArtistName };

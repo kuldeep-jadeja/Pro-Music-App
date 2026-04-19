@@ -71,6 +71,7 @@ const ARTIST_EXPAND_QUEUE_KEY = 'demus:artist-expand:queue';
 // MUST be 'demus:artist-expand:queue' — NOT 'demus:ytmatch:queue' (worker isolation per SYNC-01)
 const YTMATCH_QUEUE_KEY = 'demus:ytmatch:queue'; // used ONLY for rpush (outbound), never BLPOP
 const METADATA_QUEUE_KEY = 'demus:metadata:queue'; // used ONLY for rpush (outbound), never BLPOP
+const METADATA_QUEUE_LOCK_PREFIX = 'demus:metadata:queued:';
 const JOB_DELAY_MS = 500; // brief pause between jobs (ms)
 const ARTIST_EXPAND_YTMATCH_MAX_DEPTH = Math.max(1, Number.parseInt(process.env.ARTIST_EXPAND_YTMATCH_MAX_DEPTH || '200', 10) || 200);
 const ARTIST_EXPAND_BACKPRESSURE_SLEEP_MS = Math.max(50, Number.parseInt(process.env.ARTIST_EXPAND_BACKPRESSURE_SLEEP_MS || '500', 10) || 500);
@@ -186,6 +187,9 @@ async function enqueueGenreJobs(redis, tracks) {
         if (!genreTags.length || !track.spotifyId) continue;
         const source = track._genreSource || 'lastfm';
         try {
+            const lockKey = `${METADATA_QUEUE_LOCK_PREFIX}${track.spotifyId}`;
+            const lockStatus = await redis.set(lockKey, '1', 'EX', 3600, 'NX');
+            if (lockStatus !== 'OK') continue;
             await redis.rpush(METADATA_QUEUE_KEY, JSON.stringify({
                 spotifyId: track.spotifyId,
                 computedMetadata: {

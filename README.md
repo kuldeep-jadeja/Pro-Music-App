@@ -133,8 +133,34 @@ Environment flag for Phase 1:
 ```env
 METADATA_WORKER_SHADOW_MODE=true
 # Optional: comma-separated genre provider priority
-# values: spotify,lastfm,theaudiodb,deezer,musicbrainz
-GENRE_PROVIDER_ORDER=lastfm,theaudiodb,musicbrainz,deezer,spotify
+# values: lastfm,theaudiodb,genius,discogs,musicbrainz,deezer,spotify,gemini
+GENRE_PROVIDER_ORDER=lastfm,theaudiodb,genius,discogs,musicbrainz,deezer,spotify,gemini
+# Optional: enables Genius provider
+# GENIUS_ACCESS_TOKEN=...
+# Optional: custom User-Agent for Discogs API
+# DISCOGS_USER_AGENT=Demus/1.0 (+your-contact-url)
+# Optional: Gemini AI fallback (used only in backfill script)
+# GEMINI_API_KEY=...
+# Optional: minimum accepted Gemini confidence (0-1)
+# GEMINI_MIN_CONFIDENCE=0.55
+# Optional: minimum album coverage before album propagation
+# ALBUM_GENRE_MIN_COVERAGE=0.3
+```
+
+Genre enrichment commands:
+
+```bash
+npm run enrich:genres
+npm run genres:propagate:albums
+npm run genres:propagate
+npm run genres:normalize
+npm run genres:pipeline
+```
+
+Dry-run sample:
+
+```bash
+npm run genres:pipeline:dry
 ```
 
 ---
@@ -156,12 +182,22 @@ User pastes Spotify URL
 9. Writes youtubeVideoId to Track document
 10. Updates playlist progress (0→100%)
         ↓  (also fire-and-forget)
-11. 5-tier metadata enrichment (album/art + genre candidates):
+11. 8-provider metadata enrichment (album/art + genre candidates):
     • Tier 1: iTunes Search API
     • Tier 2: Deezer
     • Tier 3: TheAudioDB
-    • Tier 4: Last.fm (optional, API key)
-    • Tier 5: MusicBrainz + CAA (serialised, 1 req/s)
+    • Tier 4: Last.fm (track + artist tags, optional API key)
+    • Tier 5: Genius + Discogs (optional token/User-Agent)
+    • Tier 6: MusicBrainz + CAA (serialised, 1 req/s)
+    • Tier 7: Spotify artist genres
+    • Tier 8: Gemini fallback (backfill script only)
+12. Post-enrichment repair flow:
+    • Album-level propagation (same album, 30%+ coverage)
+    • Artist-level propagation fallback
+    • Genre normalization cleanup pass
+13. Redis optimization:
+    • Negative cache for repeated failures
+    • Metadata queue de-dup lock per spotifyId
 ```
 
 ---
@@ -177,6 +213,7 @@ User pastes Spotify URL
 | Cache & Queue  | Redis (ioredis)                     | Optional — rate limiting + yt-search job queue           |
 | Auth           | JWT (HTTP-only cookie)              | Stateless, secure, no session storage in Redis           |
 | Music Data     | `spotify-url-info` (scraping)       | Zero API keys — uses Spotify's public embed page         |
+| AI Fallback    | Gemini API (optional)               | Final fallback for hard-to-classify tracks in backfill   |
 | YouTube Search | `yt-search` (scraping)              | Zero quota — bypasses YouTube Data API entirely          |
 | Playback       | YouTube IFrame API                  | Browser-native, free, no audio proxying                  |
 | Icons          | Lucide React                        | Lightweight, tree-shakeable                              |
@@ -225,7 +262,7 @@ Pro-Music-App/
 │   ├── requireAuth.js       # HOF route guard
 │   ├── rateLimit.js         # sliding-window rate limiter
 │   ├── redisRateLimit.js    # Redis-backed limiter
-│   ├── spotify.js           # Scraping + 3-tier enrichment
+│   ├── spotify.js           # Spotify scraping/parsing helpers
 │   ├── youtube.js           # enqueue(), searchYouTubeTrack(), batchMatchTracks()
 │   ├── youtubeMatcher.js    # Lightweight single-track matcher
 │   ├── trackFingerprint.js  # Dedup normalization
@@ -242,10 +279,17 @@ Pro-Music-App/
 │
 ├── workers/
 │   ├── ytMatchWorker.js     # Standalone BLPOP consumer (npm run ytmatch:worker)
+│   ├── metadataWorker.js    # Applies computed metadata from Redis queue
 │   ├── chartsWorker.js      # Chart playlist populator
-│   └── artistCrawler.js     # Artist metadata crawler
+│   ├── artistCrawler.js     # Artist metadata crawler
+│   ├── artistExpandWorker.js # Artist expansion queue worker
+│   └── lib/enrichment.js    # Shared album/genre enrichment providers
 │
 ├── scripts/
+│   ├── enrichGenres.js
+│   ├── propagateAlbumGenres.js
+│   ├── propagateArtistGenres.js
+│   ├── normalizeGenres.js
 │   ├── repairEmptyArtists.js
 │   ├── repairAlbumImages.js
 │   ├── repairMissingFields.js
@@ -313,6 +357,8 @@ email (unique, lowercase) | passwordHash (never returned in API) | createdAt
 ```
 spotifyId (unique) | name | artists[] | album | albumImage | duration (ms)
 youtubeVideoId     | fingerprint       | importedAt
+genres[] | primaryGenre | genreConfidence | metadataSources.genre
+metadataAttempts | metadataUpdatedAt
 ```
 
 ### Playlist

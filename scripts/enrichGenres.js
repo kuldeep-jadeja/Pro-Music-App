@@ -2,12 +2,13 @@
  * enrichGenres.js — Backfill multi-source genre tags for tracks missing genres
  *
  * Queries Track documents where genres array is empty (or missing), resolves genres
- * via worker enrichment providers (Spotify artist genres, Last.fm, TheAudioDB,
- * Deezer, MusicBrainz), and writes genres/primaryGenre back to MongoDB.
+ * via worker enrichment providers (Last.fm, TheAudioDB, Genius, Discogs,
+ * MusicBrainz, Deezer, optional Spotify, Gemini backfill fallback), and writes
+ * genres/primaryGenre back to MongoDB.
  *
  * Features:
  *   - Batch cursor (BATCH_SIZE docs per MongoDB query — never loads full collection)
- *   - Provider waterfall via workers/lib/enrichment (Spotify, Last.fm, AudioDB, Deezer, MusicBrainz)
+ *   - Provider waterfall via workers/lib/enrichment (order via GENRE_PROVIDER_ORDER)
  *   - Graceful SIGINT — finishes current batch, then exits cleanly
  *   - --dry-run flag — logs what would be written, no DB writes
  *   - --limit N flag — stop after N tracks processed (useful for testing)
@@ -160,7 +161,12 @@ async function run() {
 
         console.log(`[enrichGenres] Batch ${Math.floor(offset / BATCH_SIZE) + 1}: ${batch.length} tracks`);
 
-        const candidates = batch.map((track) => ({
+        const remainingLimit = LIMIT - processed;
+        const activeBatch = Number.isFinite(remainingLimit)
+            ? batch.slice(0, Math.max(0, remainingLimit))
+            : batch;
+
+        const candidates = activeBatch.map((track) => ({
             name: track.name || '',
             artists: Array.isArray(track.artists) ? track.artists : [],
             spotifyId: track.spotifyId || null,
@@ -168,8 +174,8 @@ async function run() {
         }));
         await enrichTrackGenres(candidates, 'enrichGenres');
 
-        for (let idx = 0; idx < batch.length; idx++) {
-            const track = batch[idx];
+        for (let idx = 0; idx < activeBatch.length; idx++) {
+            const track = activeBatch[idx];
             const candidate = candidates[idx];
             if (stopping || processed >= LIMIT) break;
 
