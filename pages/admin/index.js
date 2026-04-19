@@ -23,11 +23,11 @@ function formatStatusLabel(status) {
  * /admin — Admin landing page
  *
  * This page is protected by two layers:
- *   1. middleware.js wildcard guard (JWT validity + admin email check)
+ *   1. proxy.js wildcard guard (JWT validity + admin email check)
  *   2. getServerSideProps using requireAdmin (server-side 403 enforcement)
  *
- * Unauthenticated users never reach this — middleware sends them to /login.
- * Non-admin authenticated users never reach this — middleware sends them to /?adminAccess=required.
+ * Unauthenticated users never reach this — proxy sends them to /login.
+ * Non-admin authenticated users never reach this — proxy sends them to /?adminAccess=required.
  * This double-check via requireAdmin in getServerSideProps adds defense-in-depth.
  */
 export default function AdminDashboard({ adminEmail }) {
@@ -371,7 +371,7 @@ export default function AdminDashboard({ adminEmail }) {
                 </div>
 
                 <div className={styles.adminBody}>
-                <section className={styles.jobsSection}>
+                    <section className={styles.jobsSection}>
                         <div className={styles.statsGrid}>
                             <article className={styles.statCard}>
                                 <span className={styles.statLabel}>visible artists</span>
@@ -562,64 +562,64 @@ export default function AdminDashboard({ adminEmail }) {
                                             const statusClass = statusClassMap[displayStatus] || styles.statusUnknown;
 
                                             return (
-                                            <tr
-                                                key={job._id}
-                                                className={job.isBlocked ? styles.rowBlocked : ''}
-                                            >
-                                                <td>
-                                                    <label className={styles.checkboxCell}>
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={Boolean(selected[String(job._id)])}
-                                                            aria-label={`Select ${job.artistName || 'unknown artist'} (${job.artistSpotifyId || job.queueSpotifyId || 'unknown Spotify ID'})`}
-                                                            onChange={() => toggleRowSelection(job)}
-                                                        />
-                                                        <span className={styles.srOnly}>Select row</span>
-                                                    </label>
-                                                </td>
-                                                <td>
-                                                    <span className={`${styles.statusPill} ${statusClass}`}>
-                                                        {formatStatusLabel(displayStatus)}
-                                                    </span>
-                                                </td>
-                                                <td>
-                                                    <div className={styles.artistCell}>
-                                                        <span className={styles.artistName}>{job.artistName || 'Unknown artist'}</span>
+                                                <tr
+                                                    key={job._id}
+                                                    className={job.isBlocked ? styles.rowBlocked : ''}
+                                                >
+                                                    <td>
+                                                        <label className={styles.checkboxCell}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={Boolean(selected[String(job._id)])}
+                                                                aria-label={`Select ${job.artistName || 'unknown artist'} (${job.artistSpotifyId || job.queueSpotifyId || 'unknown Spotify ID'})`}
+                                                                onChange={() => toggleRowSelection(job)}
+                                                            />
+                                                            <span className={styles.srOnly}>Select row</span>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <span className={`${styles.statusPill} ${statusClass}`}>
+                                                            {formatStatusLabel(displayStatus)}
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <div className={styles.artistCell}>
+                                                            <span className={styles.artistName}>{job.artistName || 'Unknown artist'}</span>
+                                                            {job.isBlocked ? (
+                                                                <span className={styles.artistHint}>Excluded from cron expansion</span>
+                                                            ) : null}
+                                                        </div>
+                                                    </td>
+                                                    <td>{job.artistSpotifyId || job.queueSpotifyId || '—'}</td>
+                                                    <td>{job.updatedAt ? new Date(job.updatedAt).toLocaleString() : '—'}</td>
+                                                    <td>{job.error || (job.isBlocked ? 'blocked by admin' : '—')}</td>
+                                                    <td>
                                                         {job.isBlocked ? (
-                                                            <span className={styles.artistHint}>Excluded from cron expansion</span>
+                                                            <span className={styles.blockedBadge}>Do not expand</span>
+                                                        ) : job.status === 'failed' ? (
+                                                            <button
+                                                                className={styles.retryButton}
+                                                                type="button"
+                                                                disabled={Boolean(retryInFlight[job._id])}
+                                                                onClick={() => handleRetry(job._id)}
+                                                            >
+                                                                Retry Failed Job
+                                                            </button>
+                                                        ) : (
+                                                            <span className={styles.actionPlaceholder}>—</span>
+                                                        )}
+                                                        {retryFeedback[job._id] ? (
+                                                            <div className={styles.actionFeedback}>{retryFeedback[job._id]}</div>
                                                         ) : null}
-                                                    </div>
-                                                </td>
-                                                <td>{job.artistSpotifyId || job.queueSpotifyId || '—'}</td>
-                                                <td>{job.updatedAt ? new Date(job.updatedAt).toLocaleString() : '—'}</td>
-                                                <td>{job.error || (job.isBlocked ? 'blocked by admin' : '—')}</td>
-                                                <td>
-                                                    {job.isBlocked ? (
-                                                        <span className={styles.blockedBadge}>Do not expand</span>
-                                                    ) : job.status === 'failed' ? (
-                                                        <button
-                                                            className={styles.retryButton}
-                                                            type="button"
-                                                            disabled={Boolean(retryInFlight[job._id])}
-                                                            onClick={() => handleRetry(job._id)}
-                                                        >
-                                                            Retry Failed Job
-                                                        </button>
-                                                    ) : (
-                                                        <span className={styles.actionPlaceholder}>—</span>
-                                                    )}
-                                                    {retryFeedback[job._id] ? (
-                                                        <div className={styles.actionFeedback}>{retryFeedback[job._id]}</div>
-                                                    ) : null}
-                                                </td>
-                                            </tr>
+                                                    </td>
+                                                </tr>
                                             );
                                         })}
                                     </tbody>
                                 </table>
                             </div>
                         ) : null}
-                </section>
+                    </section>
                 </div>
             </div>
         </>
@@ -628,7 +628,7 @@ export default function AdminDashboard({ adminEmail }) {
 
 /**
  * Server-side guard: requireAdmin enforces 403 for non-admin users.
- * Defense-in-depth alongside the middleware wildcard policy.
+ * Defense-in-depth alongside the proxy wildcard policy.
  */
 export function getServerSideProps(context) {
     return new Promise((resolve) => {

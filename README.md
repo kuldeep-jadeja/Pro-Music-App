@@ -132,6 +132,9 @@ Environment flag for Phase 1:
 
 ```env
 METADATA_WORKER_SHADOW_MODE=true
+# Optional: comma-separated genre provider priority
+# values: spotify,lastfm,theaudiodb,deezer,musicbrainz
+GENRE_PROVIDER_ORDER=lastfm,theaudiodb,musicbrainz,deezer,spotify
 ```
 
 ---
@@ -153,10 +156,12 @@ User pastes Spotify URL
 9. Writes youtubeVideoId to Track document
 10. Updates playlist progress (0→100%)
         ↓  (also fire-and-forget)
-11. 3-tier metadata enrichment (album art, names):
-    • Tier 1: iTunes Search API   (5 concurrent)
-    • Tier 2: Spotify OG scrape   (3 concurrent)
-    • Tier 3: MusicBrainz + CAA   (serialised, 1 req/s)
+11. 5-tier metadata enrichment (album/art + genre candidates):
+    • Tier 1: iTunes Search API
+    • Tier 2: Deezer
+    • Tier 3: TheAudioDB
+    • Tier 4: Last.fm (optional, API key)
+    • Tier 5: MusicBrainz + CAA (serialised, 1 req/s)
 ```
 
 ---

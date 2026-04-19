@@ -43,7 +43,7 @@ async function handler(req, res) {
         }
 
         // Sign token & set cookie
-        // Include email in JWT so edge middleware can perform admin identity
+        // Include email in JWT so edge proxy can perform admin identity
         // checks without a DB round-trip (token is httpOnly, never client-visible).
         const token = signToken(user._id.toString(), user.email);
 
