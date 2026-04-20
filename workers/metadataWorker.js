@@ -408,16 +408,20 @@ async function applyMetadataUpdate(job) {
         conditionalFields.push('metadataSources');
     }
 
-    const result = await Track.updateOne(query, [
-        { $set: setPatch },
-        {
-            $set: {
-                metadataAttempts: {
-                    $add: [{ $ifNull: ['$metadataAttempts', 0] }, 1],
+    const result = await Track.updateOne(
+        query,
+        [
+            { $set: setPatch },
+            {
+                $set: {
+                    metadataAttempts: {
+                        $add: [{ $ifNull: ['$metadataAttempts', 0] }, 1],
+                    },
                 },
             },
-        },
-    ]);
+        ],
+        { updatePipeline: true }
+    );
 
     if (result.matchedCount === 0) {
         logWarn(
