@@ -391,7 +391,7 @@ npm run repair:artists    # Fix tracks with empty artist data
 npm run repair:albums     # Fix tracks missing album art
 npm run repair:all        # Run all repair passes
 
-npm run db:status         # Print DB stats (tracks, playlists, unmatched)
+npm run db:status         # Print full DB metrics (coverage, enrichment, playlist status)
 ```
 
 ---

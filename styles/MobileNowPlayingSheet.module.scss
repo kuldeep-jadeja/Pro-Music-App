@@ -242,3 +242,59 @@
         background: $accent;
     }
 }
+
+// ── Video / Audio mode toggle row ────────────────────────────
+.modeRow {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.modeBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: $radius-full;
+    border: 1px solid rgba(white, 0.15);
+    background: rgba(white, 0.06);
+    color: $text-muted;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 160ms $ease-out, color 160ms $ease-out,
+        border-color 160ms $ease-out;
+
+    &:hover {
+        background: rgba(white, 0.1);
+        color: white;
+    }
+}
+
+.modeBtnActive {
+    background: rgba($accent, 0.18);
+    border-color: rgba($accent, 0.5);
+    color: $accent;
+
+    &:hover {
+        background: rgba($accent, 0.25);
+        color: $accent;
+    }
+}
+
+.modeHint {
+    max-width: 320px;
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.4;
+    color: $text-muted;
+    text-align: center;
+
+    strong {
+        color: white;
+        font-weight: 600;
+    }
+}

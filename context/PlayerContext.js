@@ -50,6 +50,18 @@ export function PlayerProvider({ children }) {
     const [isShuffleOn, setIsShuffleOn] = useState(false);
     const [repeatMode, setRepeatMode] = useState('off'); // 'off' | 'all' | 'one'
 
+    // ── Playback mode + sheet state (lifted from AppLayout) ───────────────
+    // 'audio' → iframe hidden 1×1, relies on Media Session + silent-audio tricks.
+    // 'video' → iframe visible as a small pinned thumbnail so YouTube's own
+    //           controls (incl. PiP on iOS, system notification on Android)
+    //           register the playing session with the OS for real background play.
+    const [playbackMode, setPlaybackMode] = useState('audio'); // 'audio' | 'video'
+    const [sheetOpen, setSheetOpen] = useState(false);
+
+    const togglePlaybackMode = useCallback(() => {
+        setPlaybackMode((m) => (m === 'audio' ? 'video' : 'audio'));
+    }, []);
+
     // ── Refs for stale-closure prevention ─────────────────────────────────
     // The YT.Player callbacks (onStateChange, onError) are bound once at
     // creation time.  Reading state directly inside those closures would
@@ -117,13 +129,21 @@ export function PlayerProvider({ children }) {
 
         const create = () => {
             playerRef.current = new window.YT.Player(containerId, {
-                height: '1',
-                width: '1',
+                // Real dimensions so the iframe has a non-zero render box.
+                // The wrapper <div> clips/scales the iframe via CSS — in audio
+                // mode the wrapper is 1×1 with overflow:hidden; in video mode
+                // the wrapper sets the visible thumb size.
+                height: '360',
+                width: '640',
                 videoId: '',
                 playerVars: {
                     autoplay: 1,
                     playsinline: 1,
-                    controls: 0,
+                    // controls:1 is REQUIRED so iOS shows YouTube's built-in
+                    // Picture-in-Picture button — the only free path to real
+                    // background playback on iOS PWAs.
+                    controls: 1,
+                    modestbranding: 1,
                     rel: 0,
                     origin: window.location.origin
                 },
@@ -509,6 +529,8 @@ export function PlayerProvider({ children }) {
         isLoading,
         isShuffleOn,
         repeatMode,
+        playbackMode,
+        sheetOpen,
 
         // Initialisation (called by GlobalPlayer)
         initPlayer,
@@ -526,6 +548,8 @@ export function PlayerProvider({ children }) {
         setQueue,
         toggleShuffle,
         cycleRepeat,
+        togglePlaybackMode,
+        setSheetOpen,
 
         // Modes
         isShuffleOn,

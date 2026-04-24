@@ -27,9 +27,15 @@ import { resumeSilentAudio, resumeAudioContext } from '@/lib/unlockAudio';
  * ──────────────────────────────────────────────────────────────────────
  */
 export default function GlobalPlayer() {
-    const { initPlayer, playerRef, wasPlayingRef } = usePlayer();
+    const { initPlayer, playerRef, wasPlayingRef, playbackMode, sheetOpen } = usePlayer();
     const scriptLoaded = useRef(false);
     const wakeLockRef = useRef(null);
+
+    // ── iOS detection for PiP hint ────────────────────────────────────
+    const isIOS =
+        typeof window !== 'undefined' &&
+        /iPad|iPhone|iPod/.test(window.navigator.userAgent) &&
+        !window.MSStream;
 
     useEffect(() => {
         if (scriptLoaded.current) return;
@@ -163,26 +169,109 @@ export default function GlobalPlayer() {
         };
     }, [wasPlayingRef, requestWakeLock, releaseWakeLock]);
 
+    /*
+     * Wrapper style — 4 states:
+     *   audio mode:                        hidden 1×1 (iframe clipped via overflow)
+     *   video mode + sheet closed:         pinned thumb bottom-right above mini-player
+     *   video mode + sheet open (mobile):  pinned thumb top-right above sheet content
+     *
+     * The iframe itself always renders 100% of the wrapper via the global CSS
+     * rule below. This lets us resize the wrapper without recreating the player.
+     *
+     * iOS note: MUST NOT use display:none or visibility:hidden on the wrapper
+     * at any point — iOS Safari blocks media in those trees. In audio mode the
+     * wrapper is 1×1 with overflow:hidden and opacity:0 (the safe pattern).
+     */
+    const audioModeStyle = {
+        position: 'fixed',
+        width: '1px',
+        height: '1px',
+        opacity: 0,
+        top: 0,
+        left: 0,
+        overflow: 'hidden',
+        pointerEvents: 'none',
+        zIndex: -1,
+    };
+
+    const videoModeStyle = sheetOpen
+        ? {
+              // Sheet open (mobile Now Playing) — pin to top-right so the
+              // iframe sits above the sheet's controls and doesn't block them.
+              position: 'fixed',
+              top: 'calc(16px + env(safe-area-inset-top, 0px))',
+              right: 12,
+              width: 'min(60vw, 260px)',
+              aspectRatio: '16 / 9',
+              opacity: 1,
+              overflow: 'hidden',
+              pointerEvents: 'auto',
+              zIndex: 200,
+              borderRadius: 10,
+              boxShadow: '0 12px 32px rgba(0, 0, 0, 0.55)',
+              background: '#000',
+          }
+        : {
+              // Default floating thumb above mini-player / mobile tab bar
+              position: 'fixed',
+              bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))',
+              right: 12,
+              width: 200,
+              aspectRatio: '16 / 9',
+              opacity: 1,
+              overflow: 'hidden',
+              pointerEvents: 'auto',
+              zIndex: 120,
+              borderRadius: 10,
+              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
+              background: '#000',
+          };
+
+    const wrapperStyle = playbackMode === 'video' ? videoModeStyle : audioModeStyle;
+
     return (
-        /*
-         * Wrapper keeps the YouTube iframe accessible to iOS Safari.
-         * MUST NOT use display:none or visibility:hidden — those block
-         * media playback on iOS.  1×1px + opacity:0 is the safe pattern.
-         */
-        <div
-            style={{
-                position: 'fixed',
-                width: '1px',
-                height: '1px',
-                opacity: 0,
-                top: 0,
-                left: 0,
-                overflow: 'hidden',
-                pointerEvents: 'none',
-                zIndex: -1,
-            }}
-        >
-            <div id="youtube-player" />
-        </div>
+        <>
+            {/* Global CSS — force the iframe and its wrapper div to fill the
+                outer sized wrapper. YT API sets width/height attrs on the iframe
+                at creation so we override with !important. */}
+            <style jsx global>{`
+                #youtube-player,
+                #youtube-player iframe {
+                    width: 100% !important;
+                    height: 100% !important;
+                    display: block;
+                    border: 0;
+                }
+            `}</style>
+
+            <div style={wrapperStyle}>
+                <div id="youtube-player" />
+            </div>
+
+            {/* iOS PiP hint — only shown in video mode on iOS, and only when
+                the sheet is closed (so it doesn't overlap the sheet UI). */}
+            {playbackMode === 'video' && isIOS && !sheetOpen && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))',
+                        right: 220,
+                        maxWidth: 180,
+                        padding: '6px 10px',
+                        fontSize: 11,
+                        lineHeight: 1.3,
+                        color: 'white',
+                        background: 'rgba(0,0,0,0.75)',
+                        borderRadius: 8,
+                        zIndex: 121,
+                        pointerEvents: 'none',
+                        textAlign: 'right',
+                    }}
+                    aria-hidden="true"
+                >
+                    Tap the PiP button in the video to keep playing when locked.
+                </div>
+            )}
+        </>
     );
 }

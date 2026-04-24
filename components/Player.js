@@ -34,6 +34,8 @@ export default function Player({
         repeatMode,
         toggleShuffle,
         cycleRepeat,
+        playbackMode,
+        togglePlaybackMode,
     } = usePlayer();
 
     const [volumeOpen, setVolumeOpen] = useState(false);
@@ -169,6 +171,26 @@ export default function Player({
                         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
                             <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
                         </svg>
+                    </button>
+                    {/* Video / Audio mode toggle — enables real background
+                        play on Android (YT's auto MediaSession) and iOS (via
+                        the PiP button that appears when the iframe is visible). */}
+                    <button
+                        className={`${styles.controlBtn} ${playbackMode === 'video' ? styles.controlBtnActive : ''}`}
+                        onClick={togglePlaybackMode}
+                        title={playbackMode === 'video' ? 'Switch to audio only' : 'Show video (better background playback)'}
+                        aria-label={playbackMode === 'video' ? 'Switch to audio only' : 'Switch to video mode'}
+                        aria-pressed={playbackMode === 'video'}
+                    >
+                        {playbackMode === 'video' ? (
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                                <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
+                            </svg>
+                        ) : (
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+                            </svg>
+                        )}
                     </button>
                     {/* Repeat */}
                     <button

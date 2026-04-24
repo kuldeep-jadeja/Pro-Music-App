@@ -28,11 +28,12 @@ export default function AppLayout({ children }) {
     const router = useRouter();
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [panelOpen, setPanelOpen] = useState(true);
-    const [sheetOpen, setSheetOpen] = useState(false);
 
     const {
         currentTrack: playerCtxTrack,
         currentIndex: playerCtxIndex,
+        sheetOpen,
+        setSheetOpen,
     } = usePlayer();
 
     const lastPlayerTrackId = useRef(null);
